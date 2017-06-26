@@ -264,39 +264,26 @@ c...  setup helmholtz: [h1 A + h2 B] u = rhs where u = u_0+u_b
         icalled = 1
       endif
 
-c...  setup helmholtz: [h1 A + h2 B] u_0 = rhs - h1 A u_b
-      if (ifpec.and.ifinhom) then
-        call axhelm3 (wa,potent_b,h1,h2,1,1) 
-<<<<<<< HEAD
-        call sub3 (wb,rhs,wk1,npts) ! wb = rhs-wa       
-=======
-        call sub3 (wb,rhs,wa,npts) ! wb = rhs-wa       
-      else
-        call copy (wb,rhs,npts)    ! wb = rhs       
->>>>>>> 520248f... Rename dd_setupdmaskp as setupdmask
-      endif
-
       isd = 1
       imsh = 1
       maxit = 5000
       tol = param(22)
+
+c...  setup helmholtz: [h1 A + h2 B] u_0 = rhs - h1 A u_b
+c     call bcneu (wa,-1) robin
+c     call add2 (h2,wa,npts)
+      call axhelm3 (wa,potent_b,h1,h2,1,1) 
+      call sub3 (wb,rhs,wa,npts) ! wb = rhs-wa       
+c     call bcneu (wa,1)
+c     call add2 (wb,wa,npts) neumann
 
 c...  solve u_0 after assemble and mask for boundary on right hand side  
       call dssum (wb,nx1,ny1,nz1)
       call col2 (wb,mask,npts)
       call cggo2 (wa,wb,h1,h2,mult,mask,imsh,isd,npts,tol,maxit)
 
-<<<<<<< HEAD
-c...  u = u_0 + u_b where u_0= potent, u_b  
-      if (ifpec.and.ifinhom) call add3(potent,potent_b,wa,npts)
-=======
 c...  add u = u_0 + u_b (u_0= potent, u_b=potent_b if applicable)  
-      if (ifpec.and.ifinhom) then
-         call add3(potent,potent_b,wa,npts)
-      else 
-         call copy(potent,wa,npts)
-      endif
->>>>>>> 520248f... Rename dd_setupdmaskp as setupdmask
+      call add3(potent,potent_b,wa,npts)
 
 c...  Compute electric fields cEE=-\grad (potent)
       call cem_drift_grad(cee(1,1),cee(1,2),cee(1,3),potent)
@@ -422,44 +409,33 @@ c...  get rhs for cN and cP
 
 c...  solve cn
 
-      if (ifpec.and.ifinhom) then
-        call axhelm3 (wa,cn_b,h1n,h2n,1,1)
-        call sub3 (wb,resN,wa,npts) ! wb = resN-wa
-      else
-        call copy (wb,resN,npts)    ! wb = rhs
-      endif
+c     call bcneu (wa,-1) robin
+c     call add2 (h2n,wa,npts)
+      call axhelm3 (wa,cn_b,h1n,h2n,1,1)
+      call sub3 (wb,resN,wa,npts) 
+c     call bcneu (wa,1)
+c     call add2 (wb,wa,npts) neumann
 
       call dssum (wb,nx1,ny1,nz1)
       call col2 (wb,dmask(1,2),npts)
-      call cggo2(wa,wb,h1n,h2n,mult,dmask(1,2),
-     $   imsh,isd,npts,tol,maxit)
+      call cggo2(wa,wb,h1n,h2n,mult,dmask(1,2),imsh,isd,npts,tol,maxit)
 
-      if (ifpec.and.ifinhom) then
-        call add3 (cn,cn_b,wa,npts)
-      else
-        call copy (cn,wa,npts)      ! wb = rhs
-      endif
+      call add3 (cn,cn_b,wa,npts)
 
 c...  solve cp
 
-      if (ifpec.and.ifinhom) then
-        call axhelm3 (wa,cp_b,h1p,h2p,1,1)
-        call sub3 (wb,resP,wa,npts) ! wb = resP-wa
-      else
-        call copy (wb,resP,npts)    ! wb = resP
-      endif
+c     call bcneu (wa,-1) robin
+c     call add2 (h2p,wa,npts)
+      call axhelm3 (wa,cp_b,h1p,h2p,1,1)
+      call sub3 (wb,resP,wa,npts)
+c     call bcneu (wa,1)
+c     call add2 (wb,wa,npts) neumann
 
       call dssum (wb,nx1,ny1,nz1)
       call col2 (wb,dmask(1,3),npts)
+      call cggo2(wa,wb,h1p,h2p,mult,dmask(1,3),imsh,isd,npts,tol,maxit)
 
-      call cggo2(wa,wb,h1p,h2p,mult,dmask(1,3),
-     $   imsh,isd,npts,tol,maxit)
-
-      if (ifpec.and.ifinhom) then
-        call add3(cp,cp_b,wa,npts)
-      else
-        call copy(cp,wa,npts)
-      endif
+      call add3(cp,cp_b,wa,npts)
 
       return
       end
