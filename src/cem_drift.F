@@ -94,6 +94,10 @@ c...  these to be deleted all when IFHEX/IFTET are done
       call rzero (fcPJ ,nxzfl3)
       call rzero (fcEJ ,nxzfl3)
 
+      call rzero (rhs_pec,nxzfl3)
+      call rzero (rhs_nmn,nxzfl3)
+      call rzero (rhs_rob,nxzfl3)
+
       call rzero (w3mn ,nxyz )
       call rzero (unxm ,nxzfl)
       call rzero (unym ,nxzfl)
@@ -133,7 +137,7 @@ c...  these to be deleted all when IFHEX/IFTET are done
 c...  get global numbering on face and set material properties
       call cem_set_fc_ptr       !global numbering index on face
       call cem_drift_uvp        !set parameters
-      call cem_set_neuman_fc_ptr !fixme by ying
+      call cem_drift_bcs_fc_ptr !fixme by ying
 
 c...  inverse mass matrix including material constants
       call invers2(qbm1,bmn,npts)
@@ -188,33 +192,32 @@ c---------------------------------------------------------------------
 
       if     (ifbdf1) then    
 
-         call cem_drift_source  
-         call cem_drift_poisson 
-         call cem_drift_sem_bdf1
-
-         return
+        call cem_drift_source  
+        call cem_drift_poisson 
+        call cem_drift_sem_bdf1
+        return
 
       elseif (ifbdf2) then  
 
-         if (istep.eq.1) then
+        if (istep.eq.1) then
 
-           call copy (cN1,cN,npts)  
-           call copy (cP1,cP,npts)
-           call cem_drift_source 
-           call cem_drift_poisson 
-           call cem_drift_sem_bdf1
-           call copy (potent1,potent,npts) 
-           time= time + 0.5*dt
+          call copy (cN1,cN,npts)  
+          call copy (cP1,cP,npts)
+          call cem_drift_source 
+          call cem_drift_poisson 
+          call cem_drift_sem_bdf1
+          call copy (potent1,potent,npts) 
+          time= time + 0.5*dt
 
-         else
+        else
 
-           call cem_drift_source  
-           call cem_drift_poisson 
-           call cem_drift_sem_bdf2
+          call cem_drift_source  
+          call cem_drift_poisson 
+          call cem_drift_sem_bdf2
 
-         endif
+        endif
 
-         return
+        return
 
       endif
 
@@ -230,11 +233,12 @@ c----------------------------------------------------------------------
       include 'TOTAL'
       include 'DRIFT'
       include 'POISSON'
+      include 'BCS'    
 
       real dummy(lx1*ly1*lz1*lelt)
 
       call usersrc (time,resN,resP,resE,rhs,dummy,dummy)
- 
+
       return
       end
 c-----------------------------------------------------------------------
@@ -246,15 +250,15 @@ c----------------------------------------------------------------------
       include 'DRIFT'
       include 'POISSON'
 
+      real wa (lx1*ly1*lz1*lelt)
+      real wb(lx1*ly1*lz1*lelt)
+
       integer icalled
       save icalled
       data icalled/0/
 
-      real wa (lx1*ly1*lz1*lelt)
-      real wb(lx1*ly1*lz1*lelt)
-
       integer isd,imsh,maxit
-      real    glamin,tol
+      real    tol
 
 c...  setup helmholtz: [h1 A + h2 B] u = rhs where u = u_0+u_b
       if (icalled.eq.0) then
@@ -270,12 +274,12 @@ c...  setup helmholtz: [h1 A + h2 B] u = rhs where u = u_0+u_b
       tol = param(22)
 
 c...  setup helmholtz: [h1 A + h2 B] u_0 = rhs - h1 A u_b
-c     call bcneu (wa,-1) robin
-c     call add2 (h2,wa,npts)
+      call bcneu (wa,npts,1,-1)    
+      call add2 (h2,wa,npts)
       call axhelm3 (wa,potent_b,h1,h2,1,1) 
       call sub3 (wb,rhs,wa,npts) ! wb = rhs-wa       
-c     call bcneu (wa,1)
-c     call add2 (wb,wa,npts) neumann
+      call bcneu (wa,npts,1,1)    
+      call add2 (wb,wa,npts) 
 
 c...  solve u_0 after assemble and mask for boundary on right hand side  
       call dssum (wb,nx1,ny1,nz1)
@@ -409,12 +413,12 @@ c...  get rhs for cN and cP
 
 c...  solve cn
 
-c     call bcneu (wa,-1) robin
-c     call add2 (h2n,wa,npts)
+      call bcneu (wa,npts,2,-1)
+      call add2 (h2n,wa,npts)
       call axhelm3 (wa,cn_b,h1n,h2n,1,1)
       call sub3 (wb,resN,wa,npts) 
-c     call bcneu (wa,1)
-c     call add2 (wb,wa,npts) neumann
+      call bcneu (wa,npts,2,1)
+      call add2 (wb,wa,npts) 
 
       call dssum (wb,nx1,ny1,nz1)
       call col2 (wb,dmask(1,2),npts)
@@ -424,12 +428,12 @@ c     call add2 (wb,wa,npts) neumann
 
 c...  solve cp
 
-c     call bcneu (wa,-1) robin
-c     call add2 (h2p,wa,npts)
+      call bcneu (wa,npts,3,-1)       
+      call add2 (h2p,wa,npts)
       call axhelm3 (wa,cp_b,h1p,h2p,1,1)
       call sub3 (wb,resP,wa,npts)
-c     call bcneu (wa,1)
-c     call add2 (wb,wa,npts) neumann
+      call bcneu (wa,npts,3,1)
+      call add2 (wb,wa,npts)        
 
       call dssum (wb,nx1,ny1,nz1)
       call col2 (wb,dmask(1,3),npts)
@@ -1582,7 +1586,7 @@ c=======================================================================
       return
       end
 c-----------------------------------------------------------------------
-      subroutine cem_set_neuman_fc_ptr
+      subroutine cem_drift_bcs_fc_ptr
 c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
@@ -1611,7 +1615,7 @@ c-----------------------------------------------------------------------
             cemface_pec(l2,ifld)= i
          elseif  (CB.eq.'R  ') then
             l3= l3+1
-            cemface_r  (l3,ifld)= i
+            cemface_rob(l3,ifld)= i
          endif
       enddo
       enddo
@@ -1619,8 +1623,16 @@ c-----------------------------------------------------------------------
 
       ncemface_nmn(ifld)  = l1
       ncemface_pec(ifld)  = l2
-      ncemface_r  (ifld)  = l3
+      ncemface_rob(ifld)  = l3
       enddo
+
+      if (nid.eq.0) then
+        do ifld=i0,i1    
+         write(6,*) 'rhs_pec: BCs ncemface_pec',ifld,ncemface_pec(ifld)
+         write(6,*) 'rhs_nmn: BCs ncemface_nmn',ifld,ncemface_nmn(ifld)
+         write(6,*) 'rhs_rob: BCs ncemface_rob',ifld,ncemface_rob(ifld)
+        enddo
+      endif
 
       return
       end
@@ -1662,7 +1674,7 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
-      subroutine cem_drift_bd_r  (bdin,bdout,ifld)
+      subroutine cem_drift_bd_rob  (bdin,bdout,ifld)
 c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
@@ -1671,8 +1683,8 @@ c-----------------------------------------------------------------------
       real    bdin(1),bdout(1)
       integer ifld,i,i0,j
 
-      do i=1,ncemface_r (ifld)
-         j =cemface_r  (i,ifld)
+      do i=1,ncemface_rob (ifld)
+         j =cemface_rob (i,ifld)
          i0=cemface(j)
          bdout(i0)=bdout(i0)+bdin(i)*aream(j)
       enddo
@@ -1985,6 +1997,65 @@ c
 
       endif
 
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine bcneu (wa,n,ifld,itype) 
+c-----------------------------------------------------------------------
+      include 'SIZE'
+      include 'TOTAL'
+      include 'DRIFT'
+      include 'POISSON'
+      include 'BCS'    
+
+      integer n,ifld,itype
+      real wa(n)
+      real rhs_rob_max,rhs_nmn_max,tol
+
+      call rzero(wa,n)
+
+      if (itype.eq.-1) then
+
+        if (ncemface_rob(ifld).gt.0) then
+
+          rhs_rob_max = glamax(rhs_rob(1,ifld),nxzfl)
+          if (nid.eq.0) write(6,*) 'rhs_rob_max:',ifld,rhs_rob_max 
+
+          do i = 1,ncemface_rob(ifld)
+            j = cemface_rob(i,ifld)
+            k = cemface(j)
+            wa(k) = wa(k) + rhs_rob(i,ifld)*area(j,1,1,1)/bm1(k,1,1,1)
+          enddo
+        endif
+
+      else
+
+        if (ncemface_rob(ifld).gt.0) then
+
+          rhs_rob_max = glamax(rhs_rob(1,ifld),nxzfl)
+          if (nid.eq.0) write(6,*) 'rhs_rob_max:',ifld,rhs_rob_max 
+
+          do i = 1,ncemface_rob(ifld)
+            j = cemface_rob(i,ifld)
+            k = cemface(j)
+            wa(k) = wa(k) + rhs_rob(i,ifld)*area(j,1,1,1)
+          enddo
+        endif
+
+        if (ncemface_nmn(ifld).gt.0) then
+
+          rhs_nmn_max = glamax(rhs_nmn(1,ifld),nxzfl)
+          if (nid.eq.0) write(6,*) 'rhs_nmn_max:',ifld,rhs_nmn_max 
+
+          do i = 1,ncemface_nmn(ifld)
+            j = cemface_nmn(i,ifld)
+            k = cemface(j)
+            wa(k) = wa(k) + rhs_nmn(i,ifld)*area(j,1,1,1)
+          enddo
+        endif
+
+      endif
+      
       return
       end
 c-----------------------------------------------------------------------
