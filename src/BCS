@@ -6,11 +6,10 @@
      $             ,  cemface_pec (lxzfl,ldimt)
      $             ,  cemface_rob (lxzfl,ldimt)
       COMMON /NMNPECRBCR/
-     $                rhs_nmn  (lxzfl,ldimt)
-     $             ,  rhs_pec  (lxzfl,ldimt)
-     $             ,  rhs_rob  (lxzfl,ldimt)
+     $                bc_flux (lxzfl,ldimt)
+     $             ,  bc_conv (lxzfl,ldimt)
 
       integer         ncemface_nmn,cemface_nmn
       integer         ncemface_pec,cemface_pec
       integer         ncemface_rob,cemface_rob
-      real            rhs_nmn,rhs_pec,rhs_rob  
+      real            bc_flux,bc_conv          

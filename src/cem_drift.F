@@ -94,9 +94,8 @@ c...  these to be deleted all when IFHEX/IFTET are done
       call rzero (fcPJ ,nxzfl3)
       call rzero (fcEJ ,nxzfl3)
 
-      call rzero (rhs_pec,nxzfl3)
-      call rzero (rhs_nmn,nxzfl3)
-      call rzero (rhs_rob,nxzfl3)
+      call rzero (bc_flux,lxzfl*ldimt)
+      call rzero (bc_conv,lxzfl*ldimt)
 
       call rzero (w3mn ,nxyz )
       call rzero (unxm ,nxzfl)
@@ -274,11 +273,12 @@ c...  setup helmholtz: [h1 A + h2 B] u = rhs where u = u_0+u_b
       tol = param(22)
 
 c...  setup helmholtz: [h1 A + h2 B] u_0 = rhs - h1 A u_b
-      call bcneu (wa,npts,1,-1)    
+      call bcneusc (wa,npts,1,-1)    
       call add2 (h2,wa,npts)
-      call axhelm3 (wa,potent_b,h1,h2,1,1) 
+      call bcdirsc (potent,npts,1)    
+      call axhelm3 (wa,potent,h1,h2,1,1) 
       call sub3 (wb,rhs,wa,npts) ! wb = rhs-wa       
-      call bcneu (wa,npts,1,1)    
+      call bcneusc (wa,npts,1,1)    
       call add2 (wb,wa,npts) 
 
 c...  solve u_0 after assemble and mask for boundary on right hand side  
@@ -287,7 +287,7 @@ c...  solve u_0 after assemble and mask for boundary on right hand side
       call cggo2 (wa,wb,h1,h2,mult,mask,imsh,isd,npts,tol,maxit)
 
 c...  add u = u_0 + u_b (u_0= potent, u_b=potent_b if applicable)  
-      call add3(potent,potent_b,wa,npts)
+      call add2(potent,wa,npts)
 
 c...  Compute electric fields cEE=-\grad (potent)
       call cem_drift_grad(cee(1,1),cee(1,2),cee(1,3),potent)
@@ -413,33 +413,33 @@ c...  get rhs for cN and cP
 
 c...  solve cn
 
-      call bcneu (wa,npts,2,-1)
+      call bcneusc (wa,npts,2,-1)
       call add2 (h2n,wa,npts)
-      call axhelm3 (wa,cn_b,h1n,h2n,1,1)
+      call bcdirsc (cn,npts,1)
+      call axhelm3 (wa,cn,h1n,h2n,1,1)
       call sub3 (wb,resN,wa,npts) 
-      call bcneu (wa,npts,2,1)
+      call bcneusc (wa,npts,2,1)
       call add2 (wb,wa,npts) 
 
       call dssum (wb,nx1,ny1,nz1)
       call col2 (wb,dmask(1,2),npts)
       call cggo2(wa,wb,h1n,h2n,mult,dmask(1,2),imsh,isd,npts,tol,maxit)
-
-      call add3 (cn,cn_b,wa,npts)
+      call add2 (cn,wa,npts)
 
 c...  solve cp
 
-      call bcneu (wa,npts,3,-1)       
+      call bcneusc (wa,npts,3,-1)       
       call add2 (h2p,wa,npts)
-      call axhelm3 (wa,cp_b,h1p,h2p,1,1)
+      call bcdirsc (cp,npts,1)
+      call axhelm3 (wa,cp,h1p,h2p,1,1)
       call sub3 (wb,resP,wa,npts)
-      call bcneu (wa,npts,3,1)
+      call bcneusc (wa,npts,3,1)
       call add2 (wb,wa,npts)        
 
       call dssum (wb,nx1,ny1,nz1)
       call col2 (wb,dmask(1,3),npts)
       call cggo2(wa,wb,h1p,h2p,mult,dmask(1,3),imsh,isd,npts,tol,maxit)
-
-      call add3(cp,cp_b,wa,npts)
+      call add2(cp,wa,npts)
 
       return
       end
@@ -2000,7 +2000,36 @@ c
       return
       end
 c-----------------------------------------------------------------------
-      subroutine bcneu (wa,n,ifld,itype) 
+      subroutine bcdirsc (wa,n,ifld)
+c-----------------------------------------------------------------------
+      include 'SIZE'
+      include 'TOTAL'
+      include 'DRIFT'
+      include 'POISSON'
+      include 'BCS'   
+
+      integer n,ifld,itype
+      real wa(n)
+      real wtmp(lx1*ly1*lz1*lelt)
+
+c.... fixme: 6/28/17 misun, this is inactive yet
+
+      call rzero(wtmp,n)
+
+      if (ncemface_pec(ifld).gt.0) then
+c       do i = 1,ncemface_pec(ifld)
+c         j = cemface_pec(i,ifld)
+c         k = cemface(j)
+c         wtmp(k) = wtmp(k) + wa(k,1,1,1)*bm1(k,1,1,1)
+c       enddo
+c       call col2(wa,dmask(1,ifld),n)
+c       call add2(wa,wtmp,n)                
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine bcneusc (wa,n,ifld,itype) 
 c-----------------------------------------------------------------------
       include 'SIZE'
       include 'TOTAL'
@@ -2010,47 +2039,34 @@ c-----------------------------------------------------------------------
 
       integer n,ifld,itype
       real wa(n)
-      real rhs_rob_max,rhs_nmn_max,tol
 
       call rzero(wa,n)
 
       if (itype.eq.-1) then
 
         if (ncemface_rob(ifld).gt.0) then
-
-          rhs_rob_max = glamax(rhs_rob(1,ifld),nxzfl)
-          if (nid.eq.0) write(6,*) 'rhs_rob_max:',ifld,rhs_rob_max 
-
           do i = 1,ncemface_rob(ifld)
             j = cemface_rob(i,ifld)
             k = cemface(j)
-            wa(k) = wa(k) + rhs_rob(i,ifld)*area(j,1,1,1)/bm1(k,1,1,1)
+            wa(k) = wa(k) + bc_conv(i,ifld)*area(j,1,1,1)/bm1(k,1,1,1)
           enddo
         endif
 
       else
 
         if (ncemface_rob(ifld).gt.0) then
-
-          rhs_rob_max = glamax(rhs_rob(1,ifld),nxzfl)
-          if (nid.eq.0) write(6,*) 'rhs_rob_max:',ifld,rhs_rob_max 
-
           do i = 1,ncemface_rob(ifld)
             j = cemface_rob(i,ifld)
             k = cemface(j)
-            wa(k) = wa(k) + rhs_rob(i,ifld)*area(j,1,1,1)
+            wa(k) = wa(k) + bc_flux(i,ifld)*area(j,1,1,1)
           enddo
         endif
 
         if (ncemface_nmn(ifld).gt.0) then
-
-          rhs_nmn_max = glamax(rhs_nmn(1,ifld),nxzfl)
-          if (nid.eq.0) write(6,*) 'rhs_nmn_max:',ifld,rhs_nmn_max 
-
           do i = 1,ncemface_nmn(ifld)
             j = cemface_nmn(i,ifld)
             k = cemface(j)
-            wa(k) = wa(k) + rhs_nmn(i,ifld)*area(j,1,1,1)
+            wa(k) = wa(k) + bc_flux(i,ifld)*area(j,1,1,1)
           enddo
         endif
 
