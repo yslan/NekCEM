@@ -92,6 +92,7 @@ c-----------------------------------------------------------------------
       include 'DRIFT'
       include 'POISSON'
       include 'BCS'
+      include 'STERIC'
 
       integer i,j,i0
       real    tt, zz

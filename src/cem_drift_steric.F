@@ -17,8 +17,10 @@ c---------------------------------------------------------------------
       save     icalled
       data     icalled/0/
 
-      real wa (lx1*ly1*lz1*lelt)
-      real wb (lx1*ly1*lz1*lelt)
+      real wa_n (lx1*ly1*lz1*lelt)
+      real wa_p (lx1*ly1*lz1*lelt)
+      real wb_n (lx1*ly1*lz1*lelt)
+      real wb_p (lx1*ly1*lz1*lelt)
 
       npts= nx1*ny1*nz1*nelt 
                              
@@ -74,6 +76,30 @@ c...  solve cp
       call col2 (wb,dmask(1,3),npts)
       call cggo2(wa,wb,h1p,h2p,mult,dmask(1,3),imsh,isd,npts,tol,maxit)
       call add2(cp,wa,npts)
+      
+      
+      call bcneusc (wa,npts,3,-1) !cp
+      call bcneusc (wa,npts,2,-1) !cn
+      
+      call add2 (h2p,wa_p,npts)
+      call bcdirsc (cp,npts,1)
+      call axhelm3 (wa_p,cp,h1p,h2p,1,1)
+      
+      call axhelm_steric(an,ap,xn,xp,h1nn,h1np,h1pn,h1pp,h2o,h2z
+     $           ,imsh,isd)
+      
+      
+      call sub3 (wb,resP,wa,npts)
+      call bcneusc (wa,npts,3,1)
+      call add2 (wb,wa,npts)        
+
+      call dssum (wb,nx1,ny1,nz1)
+      call col2 (wb,dmask(1,3),npts)
+      call cggo2(wa,wb,h1p,h2p,mult,dmask(1,3),imsh,isd,npts,tol,maxit)
+      call add2(cp,wa,npts)
+      
+      
+      
 
       return
       end
@@ -115,7 +141,7 @@ c...  and add it to the right-hand-side
 C-----------------------------------------------------------------------
       subroutine drift_hmh_gmres_steric(un,up,fn,fp
      $           ,h1nn,h1np,h1pn,h1pp,h2o,h2z
-     $           ,wt,mask_n,mask_p,isd,imsh,n,tol)
+     $           ,wt,isd,imsh,n,tol)
 c-----------------------------------------------------------------------
 c     For Steric term, involving cross term linear system 
 c      Hii = B + dt(1 + ste_aii)*A_Di
@@ -124,18 +150,24 @@ c
 c      H = (Hij), f = [f1;f2;...fp], u = [u1;u2;...;up], p = # of species
 c      
 c     solving H*u = f
+      implicit none
       include 'SIZE'
       include 'TOTAL'
       include 'FDMH1'
       include 'GMRES'
-      ! need include x>xp,xn, h, r>rp,rn  res>f w>wn,wp << gmres?
-      ! v>vp vn
+      include 'STERIC'
 C
       integer  n,outer,isd,imsh
-      real     un(n),up(n),fn(n),fp(n)
+      integer  iter,iconv
+      integer  i,j,k,m
+      real     divex,etime_p,tolpss
+      
+      real     un(n),up(n),wn(n),wp(n),rn(n),rp(n),xp(n),xn(n)
+      real     fn(n),fp(n)
       real     h1nn(n),h1np(n),h1pn(n),h1pp(n),h2o(n),h2z(n)
-      real     wt(n),mask_n(n),mask_p(n)
-      real     tol,alpha,l,temp
+      real     wt(n)
+      real     tol,alpha,l,temp,rnorm
+      real     glsc3
       real*8   etime1,dnekclock
 C
 
@@ -167,7 +199,7 @@ C
             call copy   (rn,fn,n)                  ! r = res
             call copy   (rp,fp,n)                  ! r = res
             call axhelm_steric(wn,wp,xn,xp,h1nn,h1np,h1pn,h1pp,h2o,h2z
-     $           ,mask_n,mask_p,imsh,isd)          ! w = A x
+     $           ,imsh,isd)          ! w = A x
             call add2s2 (rn,wn,-1.,n)              ! r = r - w
             call add2s2 (rp,wp,-1.,n)              ! r = r - w
          endif
@@ -191,8 +223,8 @@ C
  
 c           !modified Gram-Schmidt
             do i=1,j
-               h(i,j)= glsc3(cn,vn(1,i),wt,n)      ! h    = (w,v )
-     $               + glsc3(cp,vp(1,i),wt,n)      ! i,j       i
+               h(i,j)= glsc3(un,vn(1,i),wt,n)      ! h    = (w,v )
+     $               + glsc3(up,vp(1,i),wt,n)      ! i,j       i
 
                call add2s2(wn,vn(1,i),-h(i,j),n)   ! w = w - h    v
                call add2s2(wp,vp(1,i),-h(i,j),n)   !         i,j  i
@@ -270,16 +302,17 @@ c      call ortho   (res) ! Orthogonalize wrt null space, if present
       end
 c----------------------------------------------------------------------
       subroutine axhelm_steric(an,ap,xn,xp,h1nn,h1np,h1pn,h1pp,h2o,h2z
-     $           ,mask_n,mask_p,imsh,isd)
+     $           ,imsh,isd)
 c----------------------------------------------------------------------
 c     Costum Axhelm for steric, coupling many things
       implicit none
       include 'SIZE'
       include 'TOTAL'
       include 'FDMH1'
+      include 'DRIFT'
       ! need include nx1, mask, nelv 
       
-      REAL           AN    (LX1,LY1,LZ1,LELT)
+      real           AN    (LX1,LY1,LZ1,LELT)
      $ ,             AP    (LX1,LY1,LZ1,LELT)
      $ ,             xN    (LX1,LY1,LZ1,LELT)
      $ ,             xP    (LX1,LY1,LZ1,LELT)
@@ -289,7 +322,7 @@ c     Costum Axhelm for steric, coupling many things
      $ ,             h1PP  (LX1,LY1,LZ1,LELT)
      $ ,             h2o   (LX1,LY1,LZ1,LELT) ! ones
      $ ,             h2z   (LX1,LY1,LZ1,LELT) ! zeros
-     $ ,             tp    (LX1,LY1,LZ1,LELT) ! =tmp 
+     $ ,             ttp   (LX1,LY1,LZ1,LELT) ! =tmp    
       real           term1,term2,dnekclock
       integer isd,imsh,n
 C
@@ -297,23 +330,23 @@ C
 
       call axhelm3(an,xn,h1nn,h2o,imsh,isd) ! (B+A)*cn
       call dssum  (an,nx1,ny1,nz1)
-      call col2   (an,mask_n,n)
+      call col2   (an,dmask(1,2),n)
 
-      call axhelm3(tp,xp,h1np,h2z,imsh,isd) ! B*cp
-      call dssum  (tp,nx1,ny1,nz1)
-      call col2   (tp,mask_p,n)
+      call axhelm3(ttp,xp,h1np,h2z,imsh,isd) ! B*cp
+      call dssum  (ttp,nx1,ny1,nz1)
+      call col2   (ttp,dmask(1,3),n)
 
-      call add2s2 (an,tp,1.0,n)
+      call add2s2 (an,ttp,1.0,n)
 
       call axhelm3(ap,xp,h1pp,h2o,imsh,isd) ! (B+A)*cp
       call dssum  (ap,nx1,ny1,nz1)
-      call col2   (ap,mask_p,n)
+      call col2   (ap,dmask(1,3),n)
 
-      call axhelm3(tp,xn,h1pn,h2z,imsh,isd) ! B*cn 
-      call dssum  (tp,nx1,ny1,nz1)
-      call col3   (tp,mask_n,n)
+      call axhelm3(ttp,xn,h1pn,h2z,imsh,isd) ! B*cn 
+      call dssum  (ttp,nx1,ny1,nz1)
+      call col3   (ttp,dmask(1,2),n)
 
-      call add2s2 (ap,tp,1.0,n)
+      call add2s2 (ap,ttp,1.0,n)
 
       return
       end
