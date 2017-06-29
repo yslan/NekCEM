@@ -1,0 +1,6 @@
+c-----Steric term  ! Lan
+      COMMON /STERIC/ ste_g
+     $             ,  ste_ap, ste_an
+      real            ste_g(2,2)
+      real            ste_an, ste_ap
+

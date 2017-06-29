@@ -1,0 +1,30 @@
+
+With current setting:
+You can run from lxi=2 for the following two cases. You can run on 1,2,4 cores.  
+
+
+ 1. ion_box1 (E=1000)
+
+ 2. ion_box2 (surrently E=4x4x4)
+
+    - If you want E=3x3x3, You can change ion_box2.box -4,-4,-4 to -3,-3,-3.
+    - It can be in the range from E=1x1x1 to E=10x10x10 in this curent setup. 
+      (each direction can be different number; exach direction can vary from 1 to 10).
+
+
+    - how to transfrom from the box to actual mesh:  
+
+      cd tests/pqr3d/
+      ~/Nek5000/bin/genbox (<--- how to create box mesh)
+               then, input box file name as ion_box2.box 
+               then it will produce "box.rea" with actual mesh data
+            
+      ~/Nek5000/bin/genmap (<--- how to get genbox for ion_box2)
+               input>> it will ask 0.2 or other numbers. Just give default 0.2
+               then, it will create box.map
+               
+      One you get box.rea & box.map, you can rename those as something else.
+
+
+
+
