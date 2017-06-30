@@ -100,15 +100,12 @@ c-----------------------------------------------------------------------
       real    rhs_phi(1), dummy1(1),dummy2(1)
       real    zmax,zmin,glmax,glmin
       real    eps, alpha, tmp2, tmp3 ! for constructing exact sol.
-      real    cpn_max ! estimating in STERIC
+      real    cnp_max ! estimating in STERIC
 
       eps = 1.e-14
 
       call rzero(rhs_cN,npts)
       call rzero(rhs_cP,npts)
-      call copy(cn_b,cn,npts) ! copy instead of using zero
-      call copy(cp_b,cp,npts)
-      call copy(potent_b,potent,npts)
 
       if (ncemface_pec(2).ge.1)  then ! second field  cn 
 
@@ -118,9 +115,9 @@ c-----------------------------------------------------------------------
             zz = zm1(i0,1,1,1)
 
             if (abs(zz+1).lt.eps) then
-               cn_b(i0) = 1.0
+               cn(i0) = 1.0
             elseif (abs(zz-1).lt.eps) then
-               cn_b(i0) = 2.0
+               cn(i0) = 2.0
             endif
          enddo
       endif
@@ -133,9 +130,9 @@ c-----------------------------------------------------------------------
             zz = zm1(i0,1,1,1)
          
             if (abs(zz+1).lt.eps) then ! zz=-1
-               cp_b(i0) = 2.0
+               cp(i0) = 2.0
             elseif (abs(zz-1).lt.eps) then
-               cp_b(i0) = 1.0
+               cp(i0) = 1.0
             endif
          enddo
 
@@ -155,36 +152,40 @@ c.....scale_potent has to be fixed
         do i = 1,ncemface_pec(1)
           j = cemface_pec(i,1) 
           i0 = cemface(j)               ! surface index to volume index
-c          potent_b(i0) = 0.0            ! pec bcs only physical value
+          zz = zm1(i0,1,1,1)
           if (abs(zz+1).lt.eps) then ! zz=-1
-             potent_b(i0) = 2.0
+             potent(i0) = 2.0
           elseif (abs(zz-1).lt.eps) then
-             potent_b(i0) = 1.0
+             potent(i0) = 1.0
           endif
         enddo
       endif
 
-c.....STERIC ste_g(i,j) coupling (ci,cj) (cp,cn)=(c1,c2)  <--- FIXME, Lan     
+c.....STERIC ste_g(i,j) coupling (ci,cj) (cn,cp)=(c1,c2)  <--- FIXME, Lan     
 c     var: ste_g, ste_ap, ste_an
 
-      cpn_max = 2.0 ! max of Cp Cn, > 0
+      cnp_max = 2.0 ! max of Cp Cn, > 0
 
       ste_g(1,1) = 1.0
       ste_g(2,2) = 1.0
-      ste_g(1,2) = 0.6
-      ste_g(2,1) = 0.6
+      ste_g(1,2) = 1.2
+      ste_g(2,1) = 1.2
 
       if (ste_g(1,1).gt.0.0) then
-         ste_ap = 0.7 * (ste_g(1,1) * cpn_max)
-      else
-         ste_ap = 0.0
-      endif     
-      if (ste_g(2,2).gt.0.0) then
-         ste_an = 0.7 * (ste_g(2,2) * cpn_max)
+         ste_an = 0.7 * (ste_g(1,1) * cnp_max)
       else
          ste_an = 0.0
       endif     
-
+      if (ste_g(2,2).gt.0.0) then
+         ste_ap = 0.7 * (ste_g(2,2) * cnp_max)
+      else
+         ste_ap = 0.0
+      endif     
+      if (ste_g(1,2).gt.0.0) then
+         ste_as = 0.7 * (ste_g(1,2) * cnp_max)
+      else
+         ste_as = 0.0
+      endif
 
  
       return

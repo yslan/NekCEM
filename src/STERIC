@@ -1,9 +1,10 @@
 c-----Steric term  ! Lan
       COMMON /STERIC/ ste_g(2,2)
-     $             ,  ste_ap, ste_an
+     $             ,  ste_ap, ste_an, ste_as
       real            ste_g
-      real            ste_an, ste_ap
+     $             ,  ste_an, ste_ap, ste_as
 
-      COMMON /GMRES/ vn(lx1*ly1*lz1*lelv,lgmres)
-     $             , vp(lx1*ly1*lz1*lelv,lgmres)
+
+      COMMON /GMRESS/ vn(lx1*ly1*lz1*lelv,lgmres)
+     $             ,  vp(lx1*ly1*lz1*lelv,lgmres)
       real vn,vp

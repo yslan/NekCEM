@@ -193,7 +193,9 @@ c---------------------------------------------------------------------
 
         call cem_drift_source  
         call cem_drift_poisson 
-        call cem_drift_sem_bdf1
+c        call cem_drift_sem_bdf1
+        
+        call cem_drift_sem_bdf1_steric ! testing STERIC, Lan
         return
 
       elseif (ifbdf2) then  
@@ -2012,18 +2014,18 @@ c-----------------------------------------------------------------------
       real wa(n)
       real wtmp(lx1*ly1*lz1*lelt)
 
-c.... fixme: 6/28/17 misun, this is inactive yet
+c.... fixme: 6/28/17 misun, this is inactive yet, open by Lan
 
       call rzero(wtmp,n)
 
       if (ncemface_pec(ifld).gt.0) then
-c       do i = 1,ncemface_pec(ifld)
-c         j = cemface_pec(i,ifld)
-c         k = cemface(j)
-c         wtmp(k) = wtmp(k) + wa(k,1,1,1)*bm1(k,1,1,1)
-c       enddo
-c       call col2(wa,dmask(1,ifld),n)
-c       call add2(wa,wtmp,n)                
+c        do i = 1,ncemface_pec(ifld)
+c          j = cemface_pec(i,ifld)
+c          k = cemface(j)
+c          wtmp(k) = wtmp(k) + wa(k,1,1,1)*bm1(k,1,1,1)
+c        enddo
+c        call col2(wa,dmask(1,ifld),n)
+c        call add2(wa,wtmp,n)                
       endif
 
       return

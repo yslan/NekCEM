@@ -8,6 +8,7 @@ c---------------------------------------------------------------------
       include 'DRIFT'
       include 'ZPER'
       include 'BCS'
+      include 'STERIC'
 
       integer  i,j,i0,isd,imsh,maxit
       real     wk1(lpts),wk2(lpts), tol,glamax
@@ -16,21 +17,37 @@ c---------------------------------------------------------------------
       integer  icalled
       save     icalled
       data     icalled/0/
-
+      
+      real wa (lx1*ly1*lz1*lelt)
+      real wb (lx1*ly1*lz1*lelt)
+      
       real wa_n (lx1*ly1*lz1*lelt)
       real wa_p (lx1*ly1*lz1*lelt)
       real wb_n (lx1*ly1*lz1*lelt)
       real wb_p (lx1*ly1*lz1*lelt)
+      real h1nn (lx1*ly1*lz1*lelt)
+      real h1np (lx1*ly1*lz1*lelt)
+      real h1pn (lx1*ly1*lz1*lelt)
+      real h1pp (lx1*ly1*lz1*lelt)
+      real h2o  (lx1*ly1*lz1*lelt)
+      real h2z  (lx1*ly1*lz1*lelt)
 
       npts= nx1*ny1*nz1*nelt 
                              
       if (icalled.eq.0) then
+        call rone(h2o,npts)
+        call rzero(h2z,npts)
 
         call cmult2 (h1n,diff_n,dt,npts) ! h1n= h1n * (diff_n*dt)
         call rone (h2n,npts)             ! h2n= 1.0
 
         call cmult2 (h1p,diff_p,dt,npts) ! h1p= h1p * (diff_p*dt)
         call rone (h2p,npts)             ! h2p= 1.0
+
+        call cmult2 (h1nn,h1n,1.0+ste_an,npts) !steric control term
+        call cmult2 (h1np,h1n,    ste_as,npts)
+        call cmult2 (h1pp,h1p,1.0+ste_ap,npts)
+        call cmult2 (h1pn,h1p,    ste_as,npts)
 
         icalled = 1
 
@@ -48,59 +65,77 @@ c...  get rhs for cN and cP
       call cem_drift_rhs_bdf1_steric
 
 c...  solve cn
-
-      call bcneusc (wa,npts,2,-1)
-      call add2 (h2n,wa,npts)
+c
+c      call bcneusc (wa,npts,2,-1)
+c      call add2 (h2n,wa,npts)
+c      call bcdirsc (cn,npts,1)
+c      call axhelm3 (wa,cn,h1nn,h2n,1,1)
+c      call sub3 (wb,resN,wa,npts) 
+c      call bcneusc (wa,npts,2,1)
+c      call add2 (wb,wa,npts) 
+c
+c      call dssum (wb,nx1,ny1,nz1)
+c      call col2 (wb,dmask(1,2),npts)
+c      call cggo2(wa,wb,h1nn,h2n,mult,dmask(1,2),imsh,isd,npts,tol,maxit)
+c      call add2 (cn,wa,npts)
+c
+cc...  solve cp
+c
+c      call bcneusc (wa,npts,3,-1)       
+c      call add2 (h2p,wa,npts)
+c      call bcdirsc (cp,npts,1)
+c      call axhelm3 (wa,cp,h1pp,h2p,1,1)
+c      call sub3 (wb,resP,wa,npts)
+c      call bcneusc (wa,npts,3,1)
+c      call add2 (wb,wa,npts)        
+c
+c      call dssum (wb,nx1,ny1,nz1)
+c      call col2 (wb,dmask(1,3),npts)
+c      call cggo2(wa,wb,h1pp,h2p,mult,dmask(1,3),imsh,isd,npts,tol,maxit)
+c      call add2(cp,wa,npts)
+      
+   
+c      call bcneusc (wa_n,npts,2,-1) !cn
+c      call bcneusc (wa_p,npts,3,-1) !cp
+      
+c      call add2 (h2n,wa_n,npts)
+c      call add2 (h2p,wa_p,npts)
       call bcdirsc (cn,npts,1)
-      call axhelm3 (wa,cn,h1n,h2n,1,1)
-      call sub3 (wb,resN,wa,npts) 
-      call bcneusc (wa,npts,2,1)
-      call add2 (wb,wa,npts) 
-
-      call dssum (wb,nx1,ny1,nz1)
-      call col2 (wb,dmask(1,2),npts)
-      call cggo2(wa,wb,h1n,h2n,mult,dmask(1,2),imsh,isd,npts,tol,maxit)
-      call add2 (cn,wa,npts)
-
-c...  solve cp
-
-      call bcneusc (wa,npts,3,-1)       
-      call add2 (h2p,wa,npts)
       call bcdirsc (cp,npts,1)
-      call axhelm3 (wa,cp,h1p,h2p,1,1)
-      call sub3 (wb,resP,wa,npts)
-      call bcneusc (wa,npts,3,1)
-      call add2 (wb,wa,npts)        
-
-      call dssum (wb,nx1,ny1,nz1)
-      call col2 (wb,dmask(1,3),npts)
-      call cggo2(wa,wb,h1p,h2p,mult,dmask(1,3),imsh,isd,npts,tol,maxit)
-      call add2(cp,wa,npts)
       
-      
-      call bcneusc (wa,npts,3,-1) !cp
-      call bcneusc (wa,npts,2,-1) !cn
-      
-      call add2 (h2p,wa_p,npts)
-      call bcdirsc (cp,npts,1)
-      call axhelm3 (wa_p,cp,h1p,h2p,1,1)
-      
-      call axhelm_steric(an,ap,xn,xp,h1nn,h1np,h1pn,h1pp,h2o,h2z
+      call axhelm_steric(wa_n,wa_p,cn,cp,h1nn,h1np,h1pn,h1pp,h2o,h2z
      $           ,imsh,isd)
-      
-      
-      call sub3 (wb,resP,wa,npts)
-      call bcneusc (wa,npts,3,1)
-      call add2 (wb,wa,npts)        
 
-      call dssum (wb,nx1,ny1,nz1)
-      call col2 (wb,dmask(1,3),npts)
-      call cggo2(wa,wb,h1p,h2p,mult,dmask(1,3),imsh,isd,npts,tol,maxit)
-      call add2(cp,wa,npts)
-      
-      
-      
+      call dssum (resN,nx1,ny1,nz1) ! Lan
+      call col2  (resN,dmask(1,2),npts)
 
+      call dssum (resP,nx1,ny1,nz1)
+      call col2  (resP,dmask(1,3),npts)
+      
+      call sub3 (wb_n,resN,wa_n,npts)
+      call sub3 (wb_p,resP,wa_p,npts)
+c      call bcneusc (wa_n,npts,2,1)
+c      call bcneusc (wa_p,npts,3,1)
+c      call add2 (wb_n,wa_n,npts)  
+c      call add2 (wb_p,wa_p,npts) 
+ 
+c      call dssum (wb_n,nx1,ny1,nz1)
+c      call dssum (wb_p,nx1,ny1,nz1)
+c      call col2 (wb_n,dmask(1,2),npts)
+c      call col2 (wb_p,dmask(1,3),npts)
+      
+      call drift_hmh_gmres_steric(wa_n,wa_p,wb_n,wb_p
+     $           ,h1nn,h1np,h1pn,h1pp,h2o,h2z
+     $           ,mult,isd,imsh,npts,tol)
+     
+c      call cggo2(wa_n,wb_n,h1nn,h2n,mult,dmask(1,2)
+c     $     ,imsh,isd,npts,tol,maxit)
+c      call cggo2(wa_p,wb_p,h1pp,h2p,mult,dmask(1,3)
+c     $     ,imsh,isd,npts,tol,maxit)
+
+      call add2(cn,wa_n,npts)
+      call add2(cp,wa_p,npts)
+    
       return
       end
       
@@ -113,8 +148,11 @@ c-----------------------------------------------------------------------
       include 'DRIFT'
       include 'POISSON'
       include 'BCS'
+      include 'STERIC'
       real wn(lpts), wp(lpts)
-      real w_h1n(lpts), w_h1p(lpts)
+      real w_h1n(lpts),w_h1p(lpts)
+      real g11_h1(lpts),g12_h1(lpts),g21_h1(lpts),g22_h1(lpts) ! for steric
+      real cdc_n(lpts), cdc_p(lpts), tmp(lpts)
 
       call col3 (wn,cn,bm1,npts)
       call col3 (wp,cp,bm1,npts)
@@ -134,6 +172,33 @@ c...  and add it to the right-hand-side
 
       call add2s2 (resN,wn, 1.0*dt,npts)
       call add2s2 (resP,wp,-1.0*dt,npts)
+
+C     Adding STERIC terms, Lan
+      call cmult2(g11_h1,cn,ste_g(1,1),npts) ! ci * gij
+      call cmult2(g12_h1,cn,ste_g(1,2),npts)
+      call cmult2(g21_h1,cp,ste_g(2,1),npts)
+      call cmult2(g22_h1,cp,ste_g(2,2),npts)
+
+      call add2s2(g11_h1,h1n,-1.0*ste_an,npts) ! c1 * g11 - ste_an
+      call add2s2(g12_h1,h1n,-1.0*ste_as,npts) ! c1 * g12 - ste_as
+      call add2s2(g21_h1,h1n,-1.0*ste_as,npts) ! c2 * g21 - ste_as
+      call add2s2(g22_h1,h1n,-1.0*ste_ap,npts) ! c2 * g22 - ste_ap
+      
+      call col2(g11_h1,mu_n,npts) ! mu_i ci g_ij 
+      call col2(g12_h1,mu_n,npts)
+      call col2(g21_h1,mu_p,npts)
+      call col2(g22_h1,mu_p,npts)
+
+      call axhelm3(cdc_n,cn,g11_h1,h2,1,1)
+      call axhelm3(tmp  ,cp,g12_h1,h2,1,1)
+      call add2s2 (cdc_n,tmp,1.0,npts)
+
+      call axhelm3(cdc_p,cn,g21_h1,h2,1,1)
+      call axhelm3(tmp  ,cp,g22_h1,h2,1,1)
+      call add2s2 (cdc_p,tmp,1.0,npts)
+
+      call add2s2(resN,cdc_n,-1.0*dt,npts) 
+      call add2s2(resP,cdc_p,-1.0*dt,npts)
 
       return
       end
@@ -223,8 +288,8 @@ C
  
 c           !modified Gram-Schmidt
             do i=1,j
-               h(i,j)= glsc3(un,vn(1,i),wt,n)      ! h    = (w,v )
-     $               + glsc3(up,vp(1,i),wt,n)      ! i,j       i
+               h(i,j)= glsc3(wn,vn(1,i),wt,n)      ! h    = (w,v )
+     $               + glsc3(wp,vp(1,i),wt,n)      ! i,j       i
 
                call add2s2(wn,vn(1,i),-h(i,j),n)   ! w = w - h    v
                call add2s2(wp,vp(1,i),-h(i,j),n)   !         i,j  i
@@ -237,8 +302,9 @@ c           !modified Gram-Schmidt
                h(i  ,j)=  c(i)*temp + s(i)*h(i+1,j)
                h(i+1,j)= -s(i)*temp + c(i)*h(i+1,j)
             enddo
-                                                 !            ______
-            alpha = sqrt(glsc3(w,w,wt,n))        ! alpha =  \/ (w,w)
+                                                             
+            alpha = sqrt( glsc3(wn,wn,wt,n)          !            ______
+     $                  + glsc3(wp,wp,wt,n) )        ! alpha =  \/ (w,w)
             if(alpha.eq.0.) goto 900  !converged
             l = sqrt(h(j,j)*h(j,j)+alpha*alpha)
             temp = 1./l
@@ -332,7 +398,7 @@ C
       call dssum  (an,nx1,ny1,nz1)
       call col2   (an,dmask(1,2),n)
 
-      call axhelm3(ttp,xp,h1np,h2z,imsh,isd) ! B*cp
+      call axhelm3(ttp,xp,h1np,h2z,imsh,isd) ! A*cp
       call dssum  (ttp,nx1,ny1,nz1)
       call col2   (ttp,dmask(1,3),n)
 
@@ -342,9 +408,9 @@ C
       call dssum  (ap,nx1,ny1,nz1)
       call col2   (ap,dmask(1,3),n)
 
-      call axhelm3(ttp,xn,h1pn,h2z,imsh,isd) ! B*cn 
+      call axhelm3(ttp,xn,h1pn,h2z,imsh,isd) ! A*cn 
       call dssum  (ttp,nx1,ny1,nz1)
-      call col3   (ttp,dmask(1,2),n)
+      call col2   (ttp,dmask(1,2),n)
 
       call add2s2 (ap,ttp,1.0,n)
 
