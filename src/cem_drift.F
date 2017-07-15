@@ -263,7 +263,6 @@ c...  setup helmholtz: [h1 A + h2 B] u = rhs where u = u_0+u_b
       if (icalled.eq.0) then
         call copy (mask,dmask(1,1),npts)
         call copy (h1,d_permit,npts)
-        call rzero (h2,npts)
         icalled = 1
       endif
 
@@ -274,11 +273,13 @@ c...  setup helmholtz: [h1 A + h2 B] u = rhs where u = u_0+u_b
 
 c...  setup helmholtz: [h1 A + h2 B] u_0 = rhs - h1 A u_b
       call bcneusc (wa,npts,1,-1)    
-      call add2 (h2,wa,npts)
+      call col2 (wa,d_permit,npts)
+      call copy (h2,wa,npts)
       call bcdirsc (potent,npts,1)    
       call axhelm3 (wa,potent,h1,h2,1,1) 
       call sub3 (wb,rhs,wa,npts) ! wb = rhs-wa       
       call bcneusc (wa,npts,1,1)    
+      call copy (wa,h1,npts,1,1)    
       call add2 (wb,wa,npts) 
 
 c...  solve u_0 after assemble and mask for boundary on right hand side  
@@ -391,14 +392,13 @@ c---------------------------------------------------------------------
       if (icalled.eq.0) then
 
         call cmult2 (h1n,diff_n,dt,npts) ! h1n= h1n * (diff_n*dt)
-        call rone (h2n,npts)             ! h2n= 1.0
-
         call cmult2 (h1p,diff_p,dt,npts) ! h1p= h1p * (diff_p*dt)
-        call rone (h2p,npts)             ! h2p= 1.0
 
         icalled = 1
 
        endif
+       call rone (h2n,npts)             ! h2n= 1.0
+       call rone (h2p,npts)             ! h2n= 1.0
 
 c...  set cggo parameters
 
@@ -419,6 +419,7 @@ c...  solve cn
       call axhelm3 (wa,cn,h1n,h2n,1,1)
       call sub3 (wb,resN,wa,npts) 
       call bcneusc (wa,npts,2,1)
+      call col2 (wa,h1n,npts) 
       call add2 (wb,wa,npts) 
 
       call dssum (wb,nx1,ny1,nz1)
@@ -434,6 +435,7 @@ c...  solve cp
       call axhelm3 (wa,cp,h1p,h2p,1,1)
       call sub3 (wb,resP,wa,npts)
       call bcneusc (wa,npts,3,1)
+      call col2 (wa,h1p,npts)        
       call add2 (wb,wa,npts)        
 
       call dssum (wb,nx1,ny1,nz1)
@@ -453,7 +455,9 @@ c-----------------------------------------------------------------------
       include 'POISSON'
       include 'BCS'
       real wn(lpts), wp(lpts)
-      real w_h1n(lpts), w_h1p(lpts)
+      real w_h1n(lpts), w_h1p(lpts), w_h2(lpts)
+      integer i,j,k
+      real tmp
 
       call col3 (wn,cn,bm1,npts)
       call col3 (wp,cp,bm1,npts)
@@ -473,6 +477,26 @@ c...  and add it to the right-hand-side
 
       call add2s2 (resN,wn, 1.0*dt,npts)
       call add2s2 (resP,wp,-1.0*dt,npts)
+
+!$ACC DATA PRESENT(cemface_nmn,cemface,cee,unxm,unym,unzm,mu_n,mu_p)
+!$ACC&     PRESENT(aream,cN,,cP)
+!$ACC PARALLEL LOOP
+      do i=1,ncemface_nmn(2) !FIXME, by Lan, adding a leftover of int by part
+         j = cemface_nmn(i,2)
+         k = cemface(j)
+         tmp = cee(k,1)*unxm(j) + cee(k,2)*unym(j) + cee(k,3)*unzm(j)
+         resN(k) = resN(k) + dt*mu_n(k)*cN(k)* tmp*aream(j) ! zN = -1
+      enddo
+!$ACC END PARALLEL LOOP
+!$ACC PARALLEL LOOP
+      do i=1,ncemface_nmn(3) 
+         j = cemface_nmn(i,3)
+         k = cemface(j)
+         tmp = cee(k,1)*unxm(j) + cee(k,2)*unym(j) + cee(k,3)*unzm(j)
+         resP(k) = resP(k) - dt*mu_p(k)*cP(k)* tmp*aream(j)
+      enddo
+!$ACC END PARALLEL LOOP
+!$ACC END DATA
 
       return
       end
