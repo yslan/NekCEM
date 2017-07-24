@@ -25,30 +25,27 @@ c---------------------------------------------------------------------
       real wa_p (lx1*ly1*lz1*lelt)
       real wb_n (lx1*ly1*lz1*lelt)
       real wb_p (lx1*ly1*lz1*lelt)
-      real h1nn (lx1*ly1*lz1*lelt)
-      real h1np (lx1*ly1*lz1*lelt)
-      real h1pn (lx1*ly1*lz1*lelt)
-      real h1pp (lx1*ly1*lz1*lelt)
-      real h2nn (lx1*ly1*lz1*lelt)
-      real h2pp (lx1*ly1*lz1*lelt)
 
       npts= nx1*ny1*nz1*nelt 
                              
       if (icalled.eq.0) then
 
-        call cmult2 (h1n,diff_n,dt,npts) ! h1n= h1n * (diff_n*dt)
-        call rone (h2n,npts)             ! h2n= 1.0
+        call cmult2 (h1c(1,1),diff_n,dt,npts) ! h1n= h1n * (diff_n*dt)
+        call rone (h2c(1,1),npts)             ! h2n= 1.0
 
-        call cmult2 (h1p,diff_p,dt,npts) ! h1p= h1p * (diff_p*dt)
-        call rone (h2p,npts)             ! h2p= 1.0
+        call cmult2 (h1c(1,2),diff_p,dt,npts) ! h1p= h1p * (diff_p*dt)
+        call rone (h2c(1,2),npts)             ! h2p= 1.0
 
-        call cmult2 (h1nn,h1n,1.0+ste_ac(1,1),npts) !steric control term
-        call cmult2 (h1np,h1n,    ste_ac(1,2),npts)
-        call cmult2 (h1pn,h1p,    ste_ac(2,1),npts)
-        call cmult2 (h1pp,h1p,1.0+ste_ac(2,2),npts)
+        call cmult2 (h1cc(1,1,1),h1c(1,1),1.0+ste_ac(1,1),npts) !steric control term
+        call cmult2 (h1cc(1,1,2),h1c(1,1),    ste_ac(1,2),npts)
+        call cmult2 (h1cc(1,2,1),h1c(1,2),    ste_ac(2,1),npts)
+        call cmult2 (h1cc(1,2,2),h1c(1,2),1.0+ste_ac(2,2),npts)
 
-        call copy (h2nn,h2n,npts)
-        call copy (h2pp,h2p,npts)
+        call copy (h2cc(1,1,1),h2c(1,1),npts)
+        call rzero(h2cc(1,1,2),npts)
+        call rzero(h2cc(1,2,1),npts)
+        call copy (h2cc(1,2,2),h2c(1,2),npts)
+
 c        icalled = 1! If not Dirichlet, need uptate each loop 
 
        endif
@@ -68,32 +65,48 @@ C     boundary surface integral
       call bcneusc0(resN,mu_n,cn,npts,2,1)
       call bcneusc0(resP,mu_p,cp,npts,3,1)
 
-c      call bcneusc_steric
+      call cem_drift_grad(gradc(1,1,1),gradc(1,2,1),gradc(1,3,1),cN)
+      call cem_drift_grad(gradc(1,1,2),gradc(1,2,2),gradc(1,3,2),cP)
+      call bcneusc_steric(resN,mu_n,npts,1,1)
+      call bcneusc_steric(resP,mu_p,npts,1,2)
 
 C     Robin, add to LHS
       call bcneusc(wa_n,npts,2,-1)
-      call col2 (wa_n,h1nn,npts)
-      call add2 (h2nn,wa_n,npts)
+      call col2 (wa_n,h1cc(1,1,1),npts)
+      call add2 (h2cc(1,1,1),wa_n,npts)
 
       call bcneusc(wa_p,npts,3,-1)
-      call col2 (wa_p,h1pp,npts)
-      call add2 (h2pp,wa_p,npts)
+      call col2 (wa_p,h1cc(1,1,2),npts)
+      call add2 (h2cc(1,1,2),wa_p,npts)
+
+      call bcneusc(wa_n,npts,2,-1)
+      call col2 (wa_n,h1cc(1,2,1),npts)
+      call add2 (h2cc(1,2,1),wa_n,npts)
+
+      call bcneusc(wa_p,npts,3,-1)
+      call col2 (wa_p,h1cc(1,2,2),npts)
+      call add2 (h2cc(1,2,2),wa_p,npts)
 
 C     Neumann + Robin, add to RHS
       call bcneusc(wa_n,npts,2,1)
-      call col2 (wa_n,h1nn,npts)
+      call col2 (wa_n,h1cc(1,1,1),npts)
       call add2 (resN,wa_n,npts)
-
       call bcneusc(wa_p,npts,3,1)
-      call col2 (wa_p,h1pp,npts)
+      call col2 (wa_p,h1cc(1,1,2),npts)
+      call add2 (resN,wa_p,npts)
+
+      call bcneusc(wa_n,npts,2,1)
+      call col2 (wa_n,h1cc(1,2,1),npts)
+      call add2 (resP,wa_n,npts)
+      call bcneusc(wa_p,npts,3,1)
+      call col2 (wa_p,h1cc(1,2,2),npts)
       call add2 (resP,wa_p,npts)
 
 C     Dirichlet seperate
       call bcdirsc (cn,npts,1)
       call bcdirsc (cp,npts,1)
       
-      call axhelm_steric(wa_n,wa_p,cn,cp,h1nn,h1np,h1pn,h1pp,h2nn,h2pp
-     $           ,imsh,isd)
+      call axhelm_steric(wa_n,wa_p,cn,cp,imsh,isd)
 
       call sub3 (wb_n,resN,wa_n,npts)
       call sub3 (wb_p,resP,wa_p,npts)
@@ -107,16 +120,16 @@ C     dssum on RHS
 
 C     Solve Linear system
       if (ste_ac(1,2)*ste_ac(2,1).eq.0) then 
-        call cggo2(wa_n,wb_n,h1nn,h2nn,mult,dmask(1,2)
+        call cggo2(wa_n,wb_n,h1cc(1,1,1),h2cc(1,1,1),mult,dmask(1,2)
      $       ,imsh,isd,npts,tol,maxit)
-        call cggo2(wa_p,wb_p,h1pp,h2pp,mult,dmask(1,3)
+        call cggo2(wa_p,wb_p,h1cc(1,2,2),h2cc(1,2,2),mult,dmask(1,3)
      $       ,imsh,isd,npts,tol,maxit)
       else
         call drift_hmh_gmres_steric(wa_n,wa_p,wb_n,wb_p
-     $             ,h1nn,h1np,h1pn,h1pp,h2nn,h2pp
-     $             ,mult,isd,imsh,npts,tol)
+     $       ,mult,isd,imsh,npts,tol)
       endif
 
+C     Add Dirichlet back
       call add2(cn,wa_n,npts)
       call add2(cp,wa_p,npts)
     
@@ -146,10 +159,10 @@ C     Adding STERIC terms, Lan
       call cmult2(g21_h1,cp,ste_g(2,1),npts)
       call cmult2(g22_h1,cp,ste_g(2,2),npts)
 
-      call add2s2(g11_h1,h1n,-1.0*ste_ac(1,1),npts) ! c1 * g11 - ste_an
-      call add2s2(g12_h1,h1n,-1.0*ste_ac(1,2),npts) ! c1 * g12 - ste_as
-      call add2s2(g21_h1,h1n,-1.0*ste_ac(2,1),npts) ! c2 * g21 - ste_as
-      call add2s2(g22_h1,h1n,-1.0*ste_ac(2,2),npts) ! c2 * g22 - ste_ap
+      call add2s2(g11_h1,h1c(1,1),-1.0*ste_ac(1,1),npts) ! c1 * g11 - ste_an
+      call add2s2(g12_h1,h1c(1,2),-1.0*ste_ac(1,2),npts) ! c1 * g12 - ste_as
+      call add2s2(g21_h1,h1c(1,1),-1.0*ste_ac(2,1),npts) ! c2 * g21 - ste_as
+      call add2s2(g22_h1,h1c(1,2),-1.0*ste_ac(2,2),npts) ! c2 * g22 - ste_ap
       
       call col2(g11_h1,mu_n,npts) ! mu_i ci g_ij 
       call col2(g12_h1,mu_n,npts)
@@ -172,7 +185,6 @@ C     Adding STERIC terms, Lan
       
 C-----------------------------------------------------------------------
       subroutine drift_hmh_gmres_steric(un,up,fn,fp
-     $           ,h1nn,h1np,h1pn,h1pp,h2nn,h2pp
      $           ,wt,isd,imsh,n,tol)
 c-----------------------------------------------------------------------
 c     For Steric term, involving cross term linear system 
@@ -197,7 +209,6 @@ C
       
       real     un(n),up(n),wn(n),wp(n),rn(n),rp(n),xp(n),xn(n)
       real     fn(n),fp(n)
-      real     h1nn(n),h1np(n),h1pn(n),h1pp(n),h2nn(n),h2pp(n)
       real     wt(n)
       real     tol,alpha,l,temp,rnorm
       real     glsc3
@@ -231,8 +242,7 @@ C
             !update residual
             call copy   (rn,fn,n)                  ! r = res
             call copy   (rp,fp,n)                  ! r = res
-            call axhelm_steric(wn,wp,xn,xp,h1nn,h1np,h1pn,h1pp,h2nn,h2pp
-     $           ,imsh,isd)          ! w = A x
+            call axhelm_steric(wn,wp,xn,xp,imsh,isd)! w = A x
 
             call dssum  (wn,nx1,ny1,nz1) !Lan dssum
             call col2   (wn,dmask(1,2),n)
@@ -257,8 +267,7 @@ C
          !write(6,*) 'start form m-th krylov subspace'
          do j=1,m
             iter = iter+1
-            call axhelm_steric(wn,wp,vn(1,j),vp(1,j),h1nn,h1np,h1pn,h1pp
-     $           ,h2nn,h2pp,imsh,isd)                ! w = A v 
+            call axhelm_steric(wn,wp,vn(1,j),vp(1,j),imsh,isd)! w = A v 
             call dssum  (wn,nx1,ny1,nz1)
             call col2   (wn,dmask(1,2),n)
             call dssum  (wp,nx1,ny1,nz1)
@@ -345,42 +354,34 @@ c      call ortho   (res) ! Orthogonalize wrt null space, if present
       return
       end
 c----------------------------------------------------------------------
-      subroutine axhelm_steric(an,ap,xn,xp,h1nn,h1np,h1pn,h1pp,h2nn,h2pp
-     $           ,imsh,isd)
+      subroutine axhelm_steric(an,ap,xn,xp,imsh,isd)
 c----------------------------------------------------------------------
 c     Costum Axhelm for steric, coupling many things
+c     Use h1cc(1,i,j), h2cc(1,i,j) for  h1*A + h2*B
       implicit none
       include 'SIZE'
       include 'TOTAL'
       include 'FDMH1'
       include 'DRIFT'
-      ! need include nx1, mask, nelv 
+      include 'STERIC'
       
       real           AN    (LX1,LY1,LZ1,LELT)
      $ ,             AP    (LX1,LY1,LZ1,LELT)
      $ ,             xN    (LX1,LY1,LZ1,LELT)
      $ ,             xP    (LX1,LY1,LZ1,LELT)
-     $ ,             h1NN  (LX1,LY1,LZ1,LELT)
-     $ ,             h1NP  (LX1,LY1,LZ1,LELT)
-     $ ,             h1PN  (LX1,LY1,LZ1,LELT)
-     $ ,             h1PP  (LX1,LY1,LZ1,LELT)
-     $ ,             h2NN  (LX1,LY1,LZ1,LELT)
-     $ ,             h2PP  (LX1,LY1,LZ1,LELT)
-     $ ,             h2z   (LX1,LY1,LZ1,LELT) ! zeros
      $ ,             ttp   (LX1,LY1,LZ1,LELT) ! =tmp    
       real           term1,term2,dnekclock
       integer isd,imsh,n
 
       n = nx1*ny1*nz1*nelv ! npts?
-      call rzero(h2z,n)
 
-      call axhelm3(an ,xn,h1nn,h2nn,imsh,isd) ! (B+A)*cn
-      call axhelm3(ttp,xp,h1np,h2z ,imsh,isd) ! A*cp
+      call axhelm3(an ,xn,h1cc(1,1,1),h2cc(1,1,1),imsh,isd) ! (B+A)*cn
+      call axhelm3(ttp,xp,h1cc(1,1,2),h2cc(1,1,2),imsh,isd) ! A*cp
 
       call add2 (an,ttp,n)
 
-      call axhelm3(ap ,xp,h1pp,h2pp,imsh,isd) ! (B+A)*cp
-      call axhelm3(ttp,xn,h1pn,h2z ,imsh,isd) ! A*cn 
+      call axhelm3(ttp,xn,h1cc(1,2,1),h2cc(1,2,1),imsh,isd) ! A*cn 
+      call axhelm3(ap ,xp,h1cc(1,2,2),h2cc(1,2,2),imsh,isd) ! (B+A)*cp
 
       call add2 (ap,ttp,n)
 
@@ -388,7 +389,57 @@ c     Costum Axhelm for steric, coupling many things
       end
 
 c----------------------------------------------------------------------
+      subroutine bcneusc_steric(wa,wb,n,ifld,itype)
+c----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'DRIFT'
+      include 'POISSON'
+      include 'BCS'
+      include 'STERIC'
+      integer n,ifld,itype
+      real wa(n),wb(n) ! wb=mu_n
+      real tmp
+      integer i,j,k,l
+      real tmp_c(n,ldimt-1)
 
+      call copy(tmp_c(1,1),cN,n) !todo wait for restructure, Lan
+      call copy(tmp_c(1,2),cP,n)
 
+      if (itype.eq.1) then
 
+        if (ncemface_rob(ifld).gt.0) then
+          do i = 1,ncemface_rob(ifld)
+              j = cemface_rob(i,ifld)
+              k = cemface(j)
+            do l=1,ldimt-1  ! run through cN cP
+              tmp = gradc(k,1,l)*unxm(j)
+     $            + gradc(k,2,l)*unym(j)+gradc(k,3,l)*unzm(j)
+              wa(k) = wa(k) + dt*wb(k)
+     $              *( tmp_c(k,ifld)*ste_g(ifld,l) - ste_ac(ifld,l) )
+     $              *tmp*aream(j)
+            enddo
+          enddo
+        endif
 
+        if (ncemface_nmn(ifld).gt.0) then
+          do i = 1,ncemface_nmn(ifld)
+            j = cemface_nmn(i,ifld)
+            k = cemface(j)
+            do l=1,ldimt-1  ! run through cN cP
+              tmp = gradc(k,1,l)*unxm(j)
+     $            + gradc(k,2,l)*unym(j)+gradc(k,3,l)*unzm(j)
+              wa(k) = wa(k) + dt*wb(k)
+     $              *( tmp_c(k,ifld)*ste_g(ifld,l) - ste_ac(ifld,l) )
+     $              *tmp*aream(j)
+            enddo
+          enddo
+        endif
+
+      endif
+
+      return
+      end
+
+c----------------------------------------------------------------------
