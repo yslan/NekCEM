@@ -71,9 +71,9 @@ C     boundary surface integral
       call bcneusc_steric(resP,mu_p,npts,3,1)
 
 C     Robin, add to LHS
-c      call bcneusc(wa_n,npts,2,-1)
-c      call col2 (wa_n,h1cc(1,1,1),npts)
-c      call add2 (h2cc(1,1,1),wa_n,npts)
+      call bcneusc(wa_n,npts,2,-1)
+      call col2 (wa_n,h1cc(1,1,1),npts)
+      call add2 (h2cc(1,1,1),wa_n,npts)
 c
 c      call bcneusc(wa_p,npts,3,-1)
 c      call col2 (wa_p,h1cc(1,1,2),npts)
@@ -83,9 +83,9 @@ c      call bcneusc(wa_n,npts,2,-1)
 c      call col2 (wa_n,h1cc(1,2,1),npts)
 c      call add2 (h2cc(1,2,1),wa_n,npts)
 c
-c      call bcneusc(wa_p,npts,3,-1)
-c      call col2 (wa_p,h1cc(1,2,2),npts)
-c      call add2 (h2cc(1,2,2),wa_p,npts)
+      call bcneusc(wa_p,npts,3,-1)
+      call col2 (wa_p,h1cc(1,2,2),npts)
+      call add2 (h2cc(1,2,2),wa_p,npts)
 
 C     Neumann + Robin, add to RHS
       call bcneusc(wa_n,npts,2,1)
@@ -103,8 +103,8 @@ c      call add2 (resP,wa_n,npts)
       call add2 (resP,wa_p,npts)
 
 C     Dirichlet seperate
-      call bcdirsc (cn,npts,1)
-      call bcdirsc (cp,npts,1)
+      call bcdirsc (cn,npts,2)
+      call bcdirsc (cp,npts,3)
       
       call axhelm_steric(wa_n,wa_p,cn,cp,imsh,isd)
 
@@ -475,7 +475,7 @@ c            enddo
           do i = 1,ncemface_nmn(ifld)
             j = cemface_nmn(i,ifld)
             k = cemface(j)
-            do l=ifld_c,ifld_c  ! run through cN cP
+c            do l=ifld_c,ifld_c  ! run through cN cP
               tmp = gradc(k,1,2)*unxm(j)
      $            + gradc(k,2,2)*unym(j)+gradc(k,3,2)*unzm(j)
               wa(k) = wa(k) + dt*wb(k)
@@ -486,7 +486,7 @@ c            enddo
               wa(k) = wa(k) + dt*wb(k)
      $              *(cP(k)*ste_g(2,1))
      $              *tmp*aream(j)
-            enddo
+c            enddo
           enddo
         endif
 
