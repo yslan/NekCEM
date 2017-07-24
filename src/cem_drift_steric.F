@@ -29,14 +29,12 @@ c---------------------------------------------------------------------
       real h1np (lx1*ly1*lz1*lelt)
       real h1pn (lx1*ly1*lz1*lelt)
       real h1pp (lx1*ly1*lz1*lelt)
-      real h2o  (lx1*ly1*lz1*lelt)
-      real h2z  (lx1*ly1*lz1*lelt)
+      real h2nn (lx1*ly1*lz1*lelt)
+      real h2pp (lx1*ly1*lz1*lelt)
 
       npts= nx1*ny1*nz1*nelt 
                              
       if (icalled.eq.0) then
-        call rone(h2o,npts)
-        call rzero(h2z,npts)
 
         call cmult2 (h1n,diff_n,dt,npts) ! h1n= h1n * (diff_n*dt)
         call rone (h2n,npts)             ! h2n= 1.0
@@ -46,10 +44,12 @@ c---------------------------------------------------------------------
 
         call cmult2 (h1nn,h1n,1.0+ste_ac(1,1),npts) !steric control term
         call cmult2 (h1np,h1n,    ste_ac(1,2),npts)
-        call cmult2 (h1pp,h1p,1.0+ste_ac(2,1),npts)
-        call cmult2 (h1pn,h1p,    ste_ac(2,2),npts)
+        call cmult2 (h1pn,h1p,    ste_ac(2,1),npts)
+        call cmult2 (h1pp,h1p,1.0+ste_ac(2,2),npts)
 
-        icalled = 1
+        call copy (h2nn,h2n,npts)
+        call copy (h2pp,h2p,npts)
+c        icalled = 1! If not Dirichlet, need uptate each loop 
 
        endif
 
@@ -64,53 +64,39 @@ c...  get rhs for cN and cP
 
       call cem_drift_rhs_bdf1_steric
 
-c...  solve cn
-c
-c      call bcneusc (wa,npts,2,-1)
-c      call add2 (h2n,wa,npts)
-c      call bcdirsc (cn,npts,1)
-c      call axhelm3 (wa,cn,h1nn,h2n,1,1)
-c      call sub3 (wb,resN,wa,npts) 
-c      call bcneusc (wa,npts,2,1)
-c      call add2 (wb,wa,npts) 
-c
-c      call dssum (wb,nx1,ny1,nz1)
-c      call col2 (wb,dmask(1,2),npts)
-c      call cggo2(wa,wb,h1nn,h2n,mult,dmask(1,2),imsh,isd,npts,tol,maxit)
-c      call add2 (cn,wa,npts)
-c
-cc...  solve cp
-c
-c      call bcneusc (wa,npts,3,-1)       
-c      call add2 (h2p,wa,npts)
-c      call bcdirsc (cp,npts,1)
-c      call axhelm3 (wa,cp,h1pp,h2p,1,1)
-c      call sub3 (wb,resP,wa,npts)
-c      call bcneusc (wa,npts,3,1)
-c      call add2 (wb,wa,npts)        
-c
-c      call dssum (wb,nx1,ny1,nz1)
-c      call col2 (wb,dmask(1,3),npts)
-c      call cggo2(wa,wb,h1pp,h2p,mult,dmask(1,3),imsh,isd,npts,tol,maxit)
-c      call add2(cp,wa,npts)
-      
-   
-c      call bcneusc (wa_n,npts,2,-1) !cn
-c      call bcneusc (wa_p,npts,3,-1) !cp
-      
-c      call add2 (h2n,wa_n,npts)
-c      call add2 (h2p,wa_p,npts)
+C     boundary surface integral
+      call bcneusc0(resN,mu_n,cn,npts,2,1)
+      call bcneusc0(resP,mu_p,cp,npts,3,1)
+
+c      call bcneusc_steric
+
+C     Robin, add to LHS
+      call bcneusc(wa_n,npts,2,-1)
+      call col2 (wa_n,h1nn,npts)
+      call add2 (h2nn,wa_n,npts)
+
+      call bcneusc(wa_p,npts,3,-1)
+      call col2 (wa_p,h1pp,npts)
+      call add2 (h2pp,wa_p,npts)
+
+C     Neumann + Robin, add to RHS
+      call bcneusc(wa_n,npts,2,1)
+      call col2 (wa_n,h1nn,npts)
+      call add2 (resN,wa_n,npts)
+
+      call bcneusc(wa_p,npts,3,1)
+      call col2 (wa_p,h1pp,npts)
+      call add2 (resP,wa_p,npts)
+
+C     Dirichlet seperate
       call bcdirsc (cn,npts,1)
       call bcdirsc (cp,npts,1)
       
-      call axhelm_steric(wa_n,wa_p,cn,cp,h1nn,h1np,h1pn,h1pp,h2o,h2z
+      call axhelm_steric(wa_n,wa_p,cn,cp,h1nn,h1np,h1pn,h1pp,h2nn,h2pp
      $           ,imsh,isd)
 
       call sub3 (wb_n,resN,wa_n,npts)
       call sub3 (wb_p,resP,wa_p,npts)
-
-
-
 
 C     dssum on RHS
       call dssum (wb_n,nx1,ny1,nz1) ! Lan
@@ -121,19 +107,15 @@ C     dssum on RHS
 
 C     Solve Linear system
       if (ste_ac(1,2)*ste_ac(2,1).eq.0) then 
-        call cggo2(wa_n,wb_n,h1nn,h2n,mult,dmask(1,2)
+        call cggo2(wa_n,wb_n,h1nn,h2nn,mult,dmask(1,2)
      $       ,imsh,isd,npts,tol,maxit)
-        call cggo2(wa_p,wb_p,h1pp,h2p,mult,dmask(1,3)
+        call cggo2(wa_p,wb_p,h1pp,h2pp,mult,dmask(1,3)
      $       ,imsh,isd,npts,tol,maxit)
       else
         call drift_hmh_gmres_steric(wa_n,wa_p,wb_n,wb_p
-     $             ,h1nn,h1np,h1pn,h1pp,h2o,h2z
+     $             ,h1nn,h1np,h1pn,h1pp,h2nn,h2pp
      $             ,mult,isd,imsh,npts,tol)
       endif
-c      call cggo2(wa_n,wb_n,h1nn,h2n,mult,dmask(1,2)
-c     $     ,imsh,isd,npts,tol,maxit)
-c      call cggo2(wa_p,wb_p,h1pp,h2p,mult,dmask(1,3)
-c     $     ,imsh,isd,npts,tol,maxit)
 
       call add2(cn,wa_n,npts)
       call add2(cp,wa_p,npts)
@@ -151,31 +133,12 @@ c-----------------------------------------------------------------------
       include 'POISSON'
       include 'ZPER'
       include 'STERIC'
-      real wn(lpts), wp(lpts)
-      real w_h1n(lpts),w_h1p(lpts)
       real g11_h1(lpts),g12_h1(lpts),g21_h1(lpts),g22_h1(lpts) ! for steric
-      real cdc_n(lpts), cdc_p(lpts), tmp(lpts)
+      real cdc_n(lpts), cdc_p(lpts), h2z(lpts), tmp(lpts)
+
+      call rzero(h2z,npts)
 
       call cem_drift_rhs_bdf1
-
-c      call col3 (wn,cn,bm1,npts)
-c      call col3 (wp,cp,bm1,npts)
-c      call add2s1 (resN,wn,dt,npts) ! resN=cN+dt*(resN) with weights
-c      call add2s1 (resP,wp,dt,npts) ! resP=cP+dt*(resP) with weights
-
-c...  resN=resN + wN: (wN= -cn\grad\Phi,\grad v), h1= mu_n*cN, h2=0
-c...  resP=resP - wP: (wP=  cp\grad\Phi,\grad v), h1= mu_p*cP, h2=0
-c...  compute the nonlinear terms: cN*(grad(phi),cP*(grad(phi)
-c...  and add it to the right-hand-side
-
-c      call col3(w_h1n,cn,mu_n,npts) ! wk_h1n= mu_n * cN   (=h1)
-c      call col3(w_h1p,cp,mu_p,npts) ! wk_h1p= mu_p * cP  (=h1)
-
-c      call axhelm3(wn,potent,w_h1n,h2,1,1)
-c      call axhelm3(wp,potent,w_h1p,h2,1,1)
-
-c      call add2s2 (resN,wn, 1.0*dt,npts)
-c      call add2s2 (resP,wp,-1.0*dt,npts)
 
 C     Adding STERIC terms, Lan
       call cmult2(g11_h1,cn,ste_g(1,1),npts) ! ci * gij
@@ -193,12 +156,12 @@ C     Adding STERIC terms, Lan
       call col2(g21_h1,mu_p,npts)
       call col2(g22_h1,mu_p,npts)
 
-      call axhelm3(cdc_n,cn,g11_h1,h2,1,1)
-      call axhelm3(tmp  ,cp,g12_h1,h2,1,1)
+      call axhelm3(cdc_n,cn,g11_h1,h2z,1,1)
+      call axhelm3(tmp  ,cp,g12_h1,h2z,1,1)
       call add2s2 (cdc_n,tmp,1.0,npts)
 
-      call axhelm3(cdc_p,cn,g21_h1,h2,1,1)
-      call axhelm3(tmp  ,cp,g22_h1,h2,1,1)
+      call axhelm3(cdc_p,cn,g21_h1,h2z,1,1)
+      call axhelm3(tmp  ,cp,g22_h1,h2z,1,1)
       call add2s2 (cdc_p,tmp,1.0,npts)
 
       call add2s2(resN,cdc_n,-1.0*dt,npts) 
@@ -209,7 +172,7 @@ C     Adding STERIC terms, Lan
       
 C-----------------------------------------------------------------------
       subroutine drift_hmh_gmres_steric(un,up,fn,fp
-     $           ,h1nn,h1np,h1pn,h1pp,h2o,h2z
+     $           ,h1nn,h1np,h1pn,h1pp,h2nn,h2pp
      $           ,wt,isd,imsh,n,tol)
 c-----------------------------------------------------------------------
 c     For Steric term, involving cross term linear system 
@@ -234,7 +197,7 @@ C
       
       real     un(n),up(n),wn(n),wp(n),rn(n),rp(n),xp(n),xn(n)
       real     fn(n),fp(n)
-      real     h1nn(n),h1np(n),h1pn(n),h1pp(n),h2o(n),h2z(n)
+      real     h1nn(n),h1np(n),h1pn(n),h1pp(n),h2nn(n),h2pp(n)
       real     wt(n)
       real     tol,alpha,l,temp,rnorm
       real     glsc3
@@ -268,7 +231,7 @@ C
             !update residual
             call copy   (rn,fn,n)                  ! r = res
             call copy   (rp,fp,n)                  ! r = res
-            call axhelm_steric(wn,wp,xn,xp,h1nn,h1np,h1pn,h1pp,h2o,h2z
+            call axhelm_steric(wn,wp,xn,xp,h1nn,h1np,h1pn,h1pp,h2nn,h2pp
      $           ,imsh,isd)          ! w = A x
 
             call dssum  (wn,nx1,ny1,nz1) !Lan dssum
@@ -295,7 +258,7 @@ C
          do j=1,m
             iter = iter+1
             call axhelm_steric(wn,wp,vn(1,j),vp(1,j),h1nn,h1np,h1pn,h1pp
-     $           ,h2o,h2z,imsh,isd)                ! w = A v 
+     $           ,h2nn,h2pp,imsh,isd)                ! w = A v 
             call dssum  (wn,nx1,ny1,nz1)
             call col2   (wn,dmask(1,2),n)
             call dssum  (wp,nx1,ny1,nz1)
@@ -382,7 +345,7 @@ c      call ortho   (res) ! Orthogonalize wrt null space, if present
       return
       end
 c----------------------------------------------------------------------
-      subroutine axhelm_steric(an,ap,xn,xp,h1nn,h1np,h1pn,h1pp,h2o,h2z
+      subroutine axhelm_steric(an,ap,xn,xp,h1nn,h1np,h1pn,h1pp,h2nn,h2pp
      $           ,imsh,isd)
 c----------------------------------------------------------------------
 c     Costum Axhelm for steric, coupling many things
@@ -401,33 +364,25 @@ c     Costum Axhelm for steric, coupling many things
      $ ,             h1NP  (LX1,LY1,LZ1,LELT)
      $ ,             h1PN  (LX1,LY1,LZ1,LELT)
      $ ,             h1PP  (LX1,LY1,LZ1,LELT)
-     $ ,             h2o   (LX1,LY1,LZ1,LELT) ! ones
+     $ ,             h2NN  (LX1,LY1,LZ1,LELT)
+     $ ,             h2PP  (LX1,LY1,LZ1,LELT)
      $ ,             h2z   (LX1,LY1,LZ1,LELT) ! zeros
      $ ,             ttp   (LX1,LY1,LZ1,LELT) ! =tmp    
       real           term1,term2,dnekclock
       integer isd,imsh,n
-C
+
       n = nx1*ny1*nz1*nelv ! npts?
+      call rzero(h2z,n)
 
-      call axhelm3(an,xn,h1nn,h2o,imsh,isd) ! (B+A)*cn
-c      call dssum  (an,nx1,ny1,nz1)
-c      call col2   (an,dmask(1,2),n)
+      call axhelm3(an ,xn,h1nn,h2nn,imsh,isd) ! (B+A)*cn
+      call axhelm3(ttp,xp,h1np,h2z ,imsh,isd) ! A*cp
 
-      call axhelm3(ttp,xp,h1np,h2z,imsh,isd) ! A*cp
-c      call dssum  (ttp,nx1,ny1,nz1)
-c      call col2   (ttp,dmask(1,3),n)
+      call add2 (an,ttp,n)
 
-      call add2s2 (an,ttp,1.0,n)
+      call axhelm3(ap ,xp,h1pp,h2pp,imsh,isd) ! (B+A)*cp
+      call axhelm3(ttp,xn,h1pn,h2z ,imsh,isd) ! A*cn 
 
-      call axhelm3(ap,xp,h1pp,h2o,imsh,isd) ! (B+A)*cp
-c      call dssum  (ap,nx1,ny1,nz1)
-c      call col2   (ap,dmask(1,3),n)
-
-      call axhelm3(ttp,xn,h1pn,h2z,imsh,isd) ! A*cn 
-c      call dssum  (ttp,nx1,ny1,nz1)
-c      call col2   (ttp,dmask(1,2),n)
-
-      call add2s2 (ap,ttp,1.0,n)
+      call add2 (ap,ttp,n)
 
       return
       end

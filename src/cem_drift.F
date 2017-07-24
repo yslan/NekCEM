@@ -511,8 +511,6 @@ c-----------------------------------------------------------------------
       include 'BCS'
       real wn(lpts), wp(lpts)
       real w_h1n(lpts), w_h1p(lpts), w_h2(lpts)
-      integer i,j,k
-      real tmp
 
       call rzero(w_h2,npts)
 
