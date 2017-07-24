@@ -67,37 +67,37 @@ C     boundary surface integral
 
       call cem_drift_grad(gradc(1,1,1),gradc(1,2,1),gradc(1,3,1),cN)
       call cem_drift_grad(gradc(1,1,2),gradc(1,2,2),gradc(1,3,2),cP)
-      call bcneusc_steric(resN,mu_n,npts,1,1)
-      call bcneusc_steric(resP,mu_p,npts,1,2)
+      call bcneusc_steric(resN,mu_n,npts,2,1)
+      call bcneusc_steric(resP,mu_p,npts,3,1)
 
 C     Robin, add to LHS
-      call bcneusc(wa_n,npts,2,-1)
-      call col2 (wa_n,h1cc(1,1,1),npts)
-      call add2 (h2cc(1,1,1),wa_n,npts)
-
-      call bcneusc(wa_p,npts,3,-1)
-      call col2 (wa_p,h1cc(1,1,2),npts)
-      call add2 (h2cc(1,1,2),wa_p,npts)
-
-      call bcneusc(wa_n,npts,2,-1)
-      call col2 (wa_n,h1cc(1,2,1),npts)
-      call add2 (h2cc(1,2,1),wa_n,npts)
-
-      call bcneusc(wa_p,npts,3,-1)
-      call col2 (wa_p,h1cc(1,2,2),npts)
-      call add2 (h2cc(1,2,2),wa_p,npts)
+c      call bcneusc(wa_n,npts,2,-1)
+c      call col2 (wa_n,h1cc(1,1,1),npts)
+c      call add2 (h2cc(1,1,1),wa_n,npts)
+c
+c      call bcneusc(wa_p,npts,3,-1)
+c      call col2 (wa_p,h1cc(1,1,2),npts)
+c      call add2 (h2cc(1,1,2),wa_p,npts)
+c
+c      call bcneusc(wa_n,npts,2,-1)
+c      call col2 (wa_n,h1cc(1,2,1),npts)
+c      call add2 (h2cc(1,2,1),wa_n,npts)
+c
+c      call bcneusc(wa_p,npts,3,-1)
+c      call col2 (wa_p,h1cc(1,2,2),npts)
+c      call add2 (h2cc(1,2,2),wa_p,npts)
 
 C     Neumann + Robin, add to RHS
       call bcneusc(wa_n,npts,2,1)
       call col2 (wa_n,h1cc(1,1,1),npts)
       call add2 (resN,wa_n,npts)
-      call bcneusc(wa_p,npts,3,1)
-      call col2 (wa_p,h1cc(1,1,2),npts)
-      call add2 (resN,wa_p,npts)
+c      call bcneusc(wa_p,npts,3,1)
+c      call col2 (wa_p,h1cc(1,1,2),npts)
+c      call add2 (resN,wa_p,npts)
 
-      call bcneusc(wa_n,npts,2,1)
-      call col2 (wa_n,h1cc(1,2,1),npts)
-      call add2 (resP,wa_n,npts)
+c      call bcneusc(wa_n,npts,2,1)
+c      call col2 (wa_n,h1cc(1,2,1),npts)
+c      call add2 (resP,wa_n,npts)
       call bcneusc(wa_p,npts,3,1)
       call col2 (wa_p,h1cc(1,2,2),npts)
       call add2 (resP,wa_p,npts)
@@ -147,9 +147,10 @@ c-----------------------------------------------------------------------
       include 'ZPER'
       include 'STERIC'
       real g11_h1(lpts),g12_h1(lpts),g21_h1(lpts),g22_h1(lpts) ! for steric
-      real cdc_n(lpts), cdc_p(lpts), h2z(lpts), tmp(lpts)
+      real cdc_n(lpts), cdc_p(lpts),h1o(lpts),h2z(lpts), tmp(lpts)
 
       call rzero(h2z,npts)
+      call rone (h1o,npts)
 
       call cem_drift_rhs_bdf1
 
@@ -159,10 +160,10 @@ C     Adding STERIC terms, Lan
       call cmult2(g21_h1,cp,ste_g(2,1),npts)
       call cmult2(g22_h1,cp,ste_g(2,2),npts)
 
-      call add2s2(g11_h1,h1c(1,1),-1.0*ste_ac(1,1),npts) ! c1 * g11 - ste_an
-      call add2s2(g12_h1,h1c(1,2),-1.0*ste_ac(1,2),npts) ! c1 * g12 - ste_as
-      call add2s2(g21_h1,h1c(1,1),-1.0*ste_ac(2,1),npts) ! c2 * g21 - ste_as
-      call add2s2(g22_h1,h1c(1,2),-1.0*ste_ac(2,2),npts) ! c2 * g22 - ste_ap
+      call add2s2(g11_h1,h1o,-1.0*ste_ac(1,1),npts) ! c1 * g11 - ste_an
+      call add2s2(g12_h1,h1o,-1.0*ste_ac(1,2),npts) ! c1 * g12 - ste_as
+      call add2s2(g21_h1,h1o,-1.0*ste_ac(2,1),npts) ! c2 * g21 - ste_as
+      call add2s2(g22_h1,h1o,-1.0*ste_ac(2,2),npts) ! c2 * g22 - ste_ap
       
       call col2(g11_h1,mu_n,npts) ! mu_i ci g_ij 
       call col2(g12_h1,mu_n,npts)
@@ -398,28 +399,35 @@ c----------------------------------------------------------------------
       include 'POISSON'
       include 'BCS'
       include 'STERIC'
-      integer n,ifld,itype
+      integer n,ifld,itype ! ifld = 1,2
       real wa(n),wb(n) ! wb=mu_n
       real tmp
-      integer i,j,k,l
-      real tmp_c(n,ldimt-1)
+      integer i,j,k,l,ifld_c
+      real tmp_c(n,2)!nion
 
       call copy(tmp_c(1,1),cN,n) !todo wait for restructure, Lan
       call copy(tmp_c(1,2),cP,n)
-
-      if (itype.eq.1) then
+      
+      ifld_c = ifld - 1 ! local index of cn cp
+      
+      if (ifld.eq.2) then !cN
 
         if (ncemface_rob(ifld).gt.0) then
           do i = 1,ncemface_rob(ifld)
-              j = cemface_rob(i,ifld)
-              k = cemface(j)
-            do l=1,ldimt-1  ! run through cN cP
-              tmp = gradc(k,1,l)*unxm(j)
-     $            + gradc(k,2,l)*unym(j)+gradc(k,3,l)*unzm(j)
+            j = cemface_rob(i,ifld)
+            k = cemface(j)
+c            do l=ifld_c,ifld_c  ! run through cN cP
+              tmp = gradc(k,1,1)*unxm(j)
+     $            + gradc(k,2,1)*unym(j)+gradc(k,3,1)*unzm(j)
               wa(k) = wa(k) + dt*wb(k)
-     $              *( tmp_c(k,ifld)*ste_g(ifld,l) - ste_ac(ifld,l) )
+     $              *(cN(k)*ste_g(1,1)-ste_ac(1,1))
      $              *tmp*aream(j)
-            enddo
+              tmp = gradc(k,1,2)*unxm(j)
+     $            + gradc(k,2,2)*unym(j)+gradc(k,3,2)*unzm(j)
+              wa(k) = wa(k) + dt*wb(k)
+     $              *(cN(k)*ste_g(1,2))
+     $              *tmp*aream(j)
+c            enddo
           enddo
         endif
 
@@ -427,11 +435,56 @@ c----------------------------------------------------------------------
           do i = 1,ncemface_nmn(ifld)
             j = cemface_nmn(i,ifld)
             k = cemface(j)
-            do l=1,ldimt-1  ! run through cN cP
-              tmp = gradc(k,1,l)*unxm(j)
-     $            + gradc(k,2,l)*unym(j)+gradc(k,3,l)*unzm(j)
+c            do l=ifld_c,ifld_c  ! run through cN cP
+              tmp = gradc(k,1,1)*unxm(j)
+     $            + gradc(k,2,1)*unym(j)+gradc(k,3,1)*unzm(j)
               wa(k) = wa(k) + dt*wb(k)
-     $              *( tmp_c(k,ifld)*ste_g(ifld,l) - ste_ac(ifld,l) )
+     $              *(cN(k)*ste_g(1,1)-ste_ac(1,1))
+     $              *tmp*aream(j)
+              tmp = gradc(k,1,2)*unxm(j)
+     $            + gradc(k,2,2)*unym(j)+gradc(k,3,2)*unzm(j)
+              wa(k) = wa(k) + dt*wb(k)
+     $              *(cN(k)*ste_g(1,2))
+     $              *tmp*aream(j)
+c            enddo
+          enddo
+        endif
+
+      elseif (ifld.eq.3) then
+
+        if (ncemface_rob(ifld).gt.0) then
+          do i = 1,ncemface_rob(ifld)
+            j = cemface_rob(i,ifld)
+            k = cemface(j)
+c            do l=ifld_c,ifld_c  ! run through cN cP
+              tmp = gradc(k,1,2)*unxm(j)
+     $            + gradc(k,2,2)*unym(j)+gradc(k,3,2)*unzm(j)
+              wa(k) = wa(k) + dt*wb(k)
+     $              *(cP(k)*ste_g(2,2)-ste_ac(2,2))
+     $              *tmp*aream(j)
+              tmp = gradc(k,1,1)*unxm(j)
+     $            + gradc(k,2,1)*unym(j)+gradc(k,3,1)*unzm(j)
+              wa(k) = wa(k) + dt*wb(k)
+     $              *(cP(k)*ste_g(2,1))
+     $              *tmp*aream(j)
+c            enddo
+          enddo
+        endif
+
+        if (ncemface_nmn(ifld).gt.0) then
+          do i = 1,ncemface_nmn(ifld)
+            j = cemface_nmn(i,ifld)
+            k = cemface(j)
+            do l=ifld_c,ifld_c  ! run through cN cP
+              tmp = gradc(k,1,2)*unxm(j)
+     $            + gradc(k,2,2)*unym(j)+gradc(k,3,2)*unzm(j)
+              wa(k) = wa(k) + dt*wb(k)
+     $              *(cP(k)*ste_g(2,2)-ste_ac(2,2))
+     $              *tmp*aream(j)
+              tmp = gradc(k,1,1)*unxm(j)
+     $            + gradc(k,2,1)*unym(j)+gradc(k,3,1)*unzm(j)
+              wa(k) = wa(k) + dt*wb(k)
+     $              *(cP(k)*ste_g(2,1))
      $              *tmp*aream(j)
             enddo
           enddo
