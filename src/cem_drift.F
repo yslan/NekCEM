@@ -197,7 +197,9 @@ c---------------------------------------------------------------------
         
         call cem_drift_source  
         call cem_drift_poisson 
-        call cem_drift_sem_bdf1
+c        call cem_drift_sem_bdf1
+
+        call cem_drift_sem_bdf1_steric ! Lan
         return
 
       elseif (ifbdf2) then  
