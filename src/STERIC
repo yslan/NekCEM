@@ -5,7 +5,10 @@ c-----Steric term  ! Lan
      $             ,  h2c (lpts,LDIMT-1)
      $             ,  h1cc(lpts,LDIMT-1,LDIMT-1)
      $             ,  h2cc(lpts,LDIMT-1,LDIMT-1)
-     $             ,  gradc(lpts,3,LDIMT-1) !Todo: move to DRIFT, Lan
+     $             ,  gradC(lpts,3,LDIMT-1) !Todo: move to DRIFT, Lan
+     $             ,  ionC(lpts,LDIMT-1) !Todo: move to DRIFT, Lan
+     $             ,  resC(lpts,LDIMT-1) !Todo: move to DRIFT, Lan
+     $             ,  mu_C(lpts,LDIMT-1) !Todo: move to DRIFT, Lan
       real            ste_g
      $             ,  ste_ac
      $             ,  h1c
@@ -13,7 +16,9 @@ c-----Steric term  ! Lan
      $             ,  h1cc
      $             ,  h2cc
      $             ,  gradc
-
+     $             ,  ionC
+     $             ,  resC
+     $             ,  mu_C
 
       COMMON /GMRESS/ vn(lx1*ly1*lz1*lelv,lgmres)
      $             ,  vp(lx1*ly1*lz1*lelv,lgmres)

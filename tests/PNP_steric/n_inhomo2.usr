@@ -98,7 +98,7 @@ c-----------------------------------------------------------------------
       include 'BCS'
       include 'STERIC'
 
-      integer i,j,i0
+      integer i,j,i0,nion
       real    tt, zz
       real    rhs_cn(1),rhs_cp(1),rhs_ce(1)
       real    rhs_phi(1), dummy1(1),dummy2(1)
@@ -209,6 +209,8 @@ c... can be modified for inhomogeneous cases
 
 c.....STERIC ste_g(i,j) coupling (ci,cj) (cn,cp)=(c1,c2)  <--- FIXME, Lan     
 c     var: ste_g, ste_ap, ste_an
+      nion = LDIMT-1
+      call rzero(ste_g,nion*nion)
 
       cnp_max = 2.0 ! max of Cp Cn, > 0
 

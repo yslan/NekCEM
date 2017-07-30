@@ -2078,7 +2078,7 @@ c-----------------------------------------------------------------------
       include 'BCS'   
 
       integer n,ifld,itype
-      real wa(n)
+      real wa(lpts)
       real wtmp(lx1*ly1*lz1*lelt)
 
 c.... fixme: 7/16/17 misun, this is still inactive
@@ -2107,9 +2107,9 @@ c-----------------------------------------------------------------------
       include 'BCS'    
 
       integer n,ifld,itype
-      real wa(n)
+      real wa(lpts)
 
-      call rzero(wa,n)
+      call rzero(wa,lpts)
 
       if (itype.eq.-1) then
 
@@ -2155,7 +2155,7 @@ c-----------------------------------------------------------------------
       include 'POISSON'
       include 'BCS'
       integer n,ifld,itype
-      real wa(n),wb(n),wc(n)
+      real wa(lpts),wb(lpts),wc(lpts)
       real tmp
       integer i,j,k
 
