@@ -76,9 +76,9 @@ c-----------------------------------------------------------------------
          ex_cn = exp(1.5+sin(alpha*pi*zz)) ! ex sol for cn
          ex_cp = exp(2.0-sin(alpha*pi*zz)) ! ex sol for cp
 
-         myscn1(i) = cee(i,1)  !ex_cn
-         myscn2(i) = cee(i,2)  !ex_cp
-         myscn3(i) = cee(i,3)  !sin(alpha*pi*zz) ! ex sol for phi  
+         myscn1(i) = 3.0            ! cN + cP \approx 3
+         myscn2(i) = -0.5*(zz+1)+2
+         myscn3(i) = -0.5*(zz+1)+2
       enddo
 
 
@@ -174,7 +174,7 @@ c... can be modified for inhomogeneous cases
           i0 = cemface(j)              ! surface index to volume index
           zz = zm1(i0,1,1,1)
           if (abs(zz+1).lt.eps) then ! zz=-1
-            bc_flux(j,1) =  0.236454    ! note: normal vec "-1", Lan
+            bc_flux(j,1) =  0.236454 ! note: normal vec "-1", Lan
           elseif (abs(zz-1).lt.eps) then
             bc_flux(j,1) = -0.236454 ! flux bcs only physical value
           endif
@@ -187,9 +187,9 @@ c... can be modified for inhomogeneous cases
           i0 = cemface(j)              ! surface index to volume index
           zz = zm1(i0,1,1,1)
           if (abs(zz+1).lt.eps) then ! zz=-1
-            bc_flux(j,2) = -1.06    ! note: normal vec "-1", Lan
+            bc_flux(j,2) = -1.06647  ! note: normal vec "-1", Lan
           elseif (abs(zz-1).lt.eps) then
-            bc_flux(j,2) =  1.06    ! flux bcs only physical value
+            bc_flux(j,2) =  1.06084 ! flux bcs only physical value
           endif
         enddo
       endif
@@ -199,9 +199,9 @@ c... can be modified for inhomogeneous cases
           i0 = cemface(j)              ! surface index to volume index
           zz = zm1(i0,1,1,1)
           if (abs(zz+1).lt.eps) then ! zz=-1
-            bc_flux(j,3) =  1.06  ! note: normal vec "-1", Lan
+            bc_flux(j,3) =  1.06084  ! note: normal vec "-1", Lan
           elseif (abs(zz-1).lt.eps) then
-            bc_flux(j,3) = -1.06  ! flux bcs only physical value
+            bc_flux(j,3) = -1.06647  ! flux bcs only physical value
           endif
         enddo
       endif
@@ -238,12 +238,12 @@ c    Fomulation: \pp{u}{xi} \cdot \vec{n}  + bc_conv * u = bc_flux
 
           if (abs(zz+1).lt.eps) then ! zz=-1
             ex_cn = 1.0 
-            ex_dcn= 1.06
+            ex_dcn= 1.06647
             bc_conv(j,2) =  5.0                             ! greater than pi
             bc_flux(j,2) = -1.0*ex_dcn + bc_conv(j,2)*ex_cn ! normal vec "-1"
           elseif (abs(zz-1).lt.eps) then
             ex_cn = 2.0
-            ex_dcn= 1.06
+            ex_dcn= 1.06084
             bc_conv(j,2) =  5.0
             bc_flux(j,2) =  ex_dcn + bc_conv(j,2)*ex_cn
           endif
@@ -258,12 +258,12 @@ c    Fomulation: \pp{u}{xi} \cdot \vec{n}  + bc_conv * u = bc_flux
 
          if (abs(zz+1).lt.eps) then ! zz=-1
             ex_cp =  2.0
-            ex_dcp= -1.06
+            ex_dcp= -1.06084
             bc_conv(j,3) =  5.0                              ! greater than pi
             bc_flux(j,3) = -1.0*ex_dcp + bc_conv(j,3)*ex_cp  ! normal vec "-1"
           elseif (abs(zz-1).lt.eps) then
             ex_cp =  1.0
-            ex_dcp= -1.06
+            ex_dcp= -1.06647
             bc_conv(j,3) =  5.0
             bc_flux(j,3) =  ex_dcp + bc_conv(j,3)*ex_cp
           endif
@@ -397,6 +397,7 @@ c-----------------------------------------------------------------------
       real l2(6),linf(6)
       real l2tol(6),linftol(6)
       real dummy(lx1*ly1*lz1*lelt)
+      real sumtt(lx1*ly1*lz1*lelt)
 
       l2(1) = 0.0
       l2(2) = 0.0
@@ -412,36 +413,37 @@ c-----------------------------------------------------------------------
       linf(5) = 0.0
       linf(6) = 0.0
 
-      l2tol(1) = 5e-8
-      l2tol(2) = 6e-8
+      l2tol(1) = 1.7e-2
+      l2tol(2) = 7.2e-2
       l2tol(3) = 0.0
-      l2tol(4) = 5e-10
+      l2tol(4) = 3.2e-2
       l2tol(5) = 0.0
       l2tol(6) = 0.0
 
-      linftol(1) = 5e-6
-      linftol(2) = 6e-6
+      linftol(1) = 2.5e-2
+      linftol(2) = 1.1e-1
       linftol(3) = 0.0
-      linftol(4) = 5e-9
+      linftol(4) = 4.5e-2
       linftol(5) = 0.0
       linftol(6) = 0.0
 
       if (istep.le.10.or.mod(istep,iocomm).eq.0) then
          call usersol(time,scn,scp,spotent,dummy,dummy,dummy)
 
-         call cem_error(cN,scN,errN,npts,l2(1),linf(1))
+         call add3s2(sumtt,cN,cP,1.0,1.0,npts)
+
+         call cem_error(sumtt,scN,errN,npts,l2(1),linf(1))
          call cem_error(cP,scP,errP,npts,l2(2),linf(2))
          call cem_error(potent,spotent,epotent,npts,l2(4),linf(4))
 
          call userprint(istep,time,dt,l2,linf,cpu_t,cpu_p_t)
 
-c disabled error check below
-c        if (istep.eq.nsteps) then
-c           do i = 1,6
-c              if (l2(i).gt.l2tol(i)) call exitt(1)
-c              if (linf(i).gt.linftol(i)) call exitt(1)
-c           enddo
-c        endif
+        if (istep.eq.nsteps) then
+           do i = 1,6
+              if (l2(i).gt.l2tol(i)) call exitt(1)
+              if (linf(i).gt.linftol(i)) call exitt(1)
+           enddo
+        endif
       endif
 
       return
