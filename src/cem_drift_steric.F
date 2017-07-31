@@ -106,7 +106,7 @@ C     Dirichlet seperate
       do ic=1,nion
          call bcdirsc (ionC(1,ic),npts,ic+1)
       enddo
-      call axhelm_steric2(wa_C,ionC,nion,imsh,isd)
+      call axhelm_steric2(wa_C,ionC,h1cc,h2cc,nion,imsh,isd)
       do ic=1,nion
          call sub3(wb_C(1,ic),resC(1,ic),wa_C(1,ic),npts)
       enddo
@@ -124,7 +124,7 @@ C     Solve Linear system
      $           ,mult,dmask(1,ic+1),imsh,isd,npts,tol,maxit)
          enddo
       else
-        call drift_hmh_gmres_steric2(wa_C,wb_C,nion
+        call drift_hmh_gmres_steric2(wa_C,wb_C,h1cc,h2cc,nion
      $       ,mult,dmask(1,2),isd,imsh,npts,tol)
       endif
 
@@ -367,7 +367,7 @@ c      call ortho   (res) ! Orthogonalize wrt null space, if present
       return
       end
 C-----------------------------------------------------------------------
-      subroutine drift_hmh_gmres_steric2(uC,fC,nion
+      subroutine drift_hmh_gmres_steric2(uC,fC,helm1,helm2,nion
      $           ,wt,mask,isd,imsh,n,tol)
 c-----------------------------------------------------------------------
 c     For Steric term, involving cross term linear system 
@@ -393,6 +393,8 @@ C
       
       real     uC(lpts,LDIMT-1)
      $       , fC(lpts,LDIMT-1)
+     $       , helm1(lpts,LDIMT-1,LDIMT-1) !h1cc
+     $       , helm2(lpts,LDIMT-1,LDIMT-1) !h2cc
      $       , mask(lpts,LDIMT-1)
      $       , wt(lpts)
       real     tol,alpha,l,temp,rnorm
@@ -428,7 +430,7 @@ C
             do ic=1,nion
             call copy  (rC(1,ic),fC(1,ic),n)      ! r = res
             enddo
-            call axhelm_steric2(wC,xxC,nion,imsh,isd)! w = A x
+            call axhelm_steric2(wC,xxC,helm1,helm2,nion,imsh,isd)! w = A x
 
             do ic=1,nion
             call dssum  (wC(1,ic),nx1,ny1,nz1)
@@ -456,7 +458,7 @@ C
          !write(6,*) 'start form m-th krylov subspace'
          do j=1,m
             iter = iter+1
-            call axhelm_steric2(wC,vC(1,1,j),nion,imsh,isd)! w = A v 
+            call axhelm_steric2(wC,vC(1,1,j),helm1,helm2,nion,imsh,isd)! w = A v 
             do ic=1,nion
             call dssum  (wC(1,ic),nx1,ny1,nz1)
             call col2   (wC(1,ic),mask(1,ic),n)
@@ -583,7 +585,7 @@ c     Use h1cc(1,i,j), h2cc(1,i,j) for  h1*A + h2*B
       end
 
 c----------------------------------------------------------------------
-      subroutine axhelm_steric2(AU,U,nion,imsh,isd)
+      subroutine axhelm_steric2(AU,U,helm1,helm2,nion,imsh,isd)
 c----------------------------------------------------------------------
 c     Costum Axhelm for steric, coupling with nion
 c     Use h1cc(1,i,j), h2cc(1,i,j) for  h1*A + h2*B
@@ -595,6 +597,8 @@ c     Use h1cc(1,i,j), h2cc(1,i,j) for  h1*A + h2*B
       real           AU    (lpts,LDIMT-1)
      $ ,             U     (lpts,LDIMT-1)
      $ ,             tmpAU (lpts) ! =tmp    
+     $ ,             helm1 (lpts,LDIMT-1,LDIMT-1) ! h1cc    
+     $ ,             helm2 (lpts,LDIMT-1,LDIMT-1) ! h2cc   
       integer isd,imsh
       integer i,j
       n = nx1*ny1*nz1*nelv
@@ -603,14 +607,14 @@ c     Use h1cc(1,i,j), h2cc(1,i,j) for  h1*A + h2*B
 
 C     Todo: if diagonal, turn this loop on
 c      do i=1,nion
-c         axhelm3(ttp,xC(1,i),h1cc(1,i,i),h2cc(1,i,i),imsh,isd)
+c         axhelm3(ttp,xC(1,i),helm1(1,i,i),helm2(1,i,i),imsh,isd)
 c         add2   (AC(1,i),ttp,npts)
 c      enddo
       do i=1,nion
-         do j=1,nion
-            call axhelm3(tmpAU,U(1,j),h1cc(1,i,j),h2cc(1,i,j),imsh,isd)
-            call add2   (AU(1,i),tmpAU,n)
-         enddo
+        do j=1,nion
+          call axhelm3(tmpAU,U(1,j),helm1(1,i,j),helm2(1,i,j),imsh,isd)
+          call add2   (AU(1,i),tmpAU,n)
+        enddo
       enddo
 
       return
