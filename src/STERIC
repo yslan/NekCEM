@@ -14,7 +14,7 @@ c-----Steric term  ! Lan
      $             ,  h2cc
      $             ,  gradc
 
-
       COMMON /GMRESS/ vn(lx1*ly1*lz1*lelv,lgmres)
      $             ,  vp(lx1*ly1*lz1*lelv,lgmres)
-      real vn,vp
+     $             ,  vvC(lx1*ly1*lz1*lelv,LDIMT-1,lgmres) ! Mind order of index, Lan
+      real vn,vp,vvC

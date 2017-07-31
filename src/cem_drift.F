@@ -235,11 +235,11 @@ C       half time step and do twice
 
         call cem_drift_source  
         call cem_drift_poisson 
-        call cem_drift_sem_bdf1
+        call cem_drift_sem_bdf1_steric !Lan
 
         call cem_drift_source  
         call cem_drift_poisson 
-        call cem_drift_sem_bdf1
+        call cem_drift_sem_bdf1_steric
 
         call copy(r2half_cN,cN,npts)
         call copy(r2half_cP,cP,npts)
@@ -254,7 +254,7 @@ C       origin BDF1
 
         call cem_drift_source  
         call cem_drift_poisson 
-        call cem_drift_sem_bdf1
+        call cem_drift_sem_bdf1_steric
 
 C       Richarson iter:  cN = 2* r2half_cN - bdf(cN,dt)
         call cmult(r2half_cN,2.0,npts)
