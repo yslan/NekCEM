@@ -74,15 +74,7 @@ C     Robin, add to LHS
       call bcneusc(wa_n,npts,2,-1)
       call col2 (wa_n,h1cc(1,1,1),npts)
       call add2 (h2cc(1,1,1),wa_n,npts)
-c
-c      call bcneusc(wa_p,npts,3,-1)
-c      call col2 (wa_p,h1cc(1,1,2),npts)
-c      call add2 (h2cc(1,1,2),wa_p,npts)
-c
-c      call bcneusc(wa_n,npts,2,-1)
-c      call col2 (wa_n,h1cc(1,2,1),npts)
-c      call add2 (h2cc(1,2,1),wa_n,npts)
-c
+
       call bcneusc(wa_p,npts,3,-1)
       call col2 (wa_p,h1cc(1,2,2),npts)
       call add2 (h2cc(1,2,2),wa_p,npts)
@@ -91,13 +83,7 @@ C     Neumann + Robin, add to RHS
       call bcneusc(wa_n,npts,2,1)
       call col2 (wa_n,h1cc(1,1,1),npts)
       call add2 (resN,wa_n,npts)
-c      call bcneusc(wa_p,npts,3,1)
-c      call col2 (wa_p,h1cc(1,1,2),npts)
-c      call add2 (resN,wa_p,npts)
 
-c      call bcneusc(wa_n,npts,2,1)
-c      call col2 (wa_n,h1cc(1,2,1),npts)
-c      call add2 (resP,wa_n,npts)
       call bcneusc(wa_p,npts,3,1)
       call col2 (wa_p,h1cc(1,2,2),npts)
       call add2 (resP,wa_p,npts)
@@ -282,7 +268,6 @@ c           !modified Gram-Schmidt
                call add2s2(wn,vn(1,i),-h(i,j),n)   ! w = w - h    v
                call add2s2(wp,vp(1,i),-h(i,j),n)   !         i,j  i
             enddo                              
-            ! Lan  a  break
 
             !apply Givens rotations to new column
             do i=1,j-1
