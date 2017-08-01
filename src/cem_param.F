@@ -13,6 +13,7 @@ c     sane.
       ifdg = .true.             ! spectral element DG method: default
       ifse = .false.            ! spectral element method
       ifexct = .false.          ! drift-diffusion solver
+      ifsteric = .false.        ! drift-diffusion w/ steric term
       iffilter = .false.        ! filter
       ific = .false.            ! initial condition
       ifrestart = .false.       ! restart output file
@@ -52,6 +53,7 @@ c     sane.
 
       if ((param(5).eq.21).or.(param(5).eq.31)) ifexct = .true.
       if ((param(5).ge.30).and.(param(5).lt.40)) ifse = .true.
+      if (param(5).eq.32) ifsteric = .true.
 
       if (param(6).eq.1) ifsrc = .true.
       if (param(7).eq.1) ifinhom = .true.
