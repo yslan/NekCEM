@@ -140,7 +140,7 @@ c...  Source for potential field (phi) at time
          tmp1 = sinx**2*sint2   ! u
          tmp2 = -2.0*pi**2*sint2*cosx2
          tmp3 = tmp2-charge(i)*tmp1
-         rhs_phi(i) = charge(i)*(cP(i)-cN(i))
+         rhs_phi(i) = charge(i)*(cN(i,2)-cN(i,1))
          rhs_phi(i) = rhs_phi(i)+tmp3
       enddo
 
@@ -154,7 +154,7 @@ c     Source for c_n,c_p,c_e at time+dt
             k = cemface(j)
             xx = xm1(k,1,1,1)
             tmp = sin(pi*xx)*sin(ttc)
-            cn(k) = tmp**2
+            cn(k,1) = tmp**2
          enddo
       endif
 
@@ -165,7 +165,7 @@ c     Source for c_n,c_p,c_e at time+dt
             k = cemface(j)
             xx = xm1(k,1,1,1)
             tmp = sin(pi*xx)*sin(ttc)
-            cp(k)=2.0*tmp**2
+            cn(k,2)=2.0*tmp**2
          enddo
 
       endif
@@ -209,15 +209,18 @@ c---------------------------------------------------------------------
 
 c     if (nid.eq.0) write(6,*) 'this is nondimension unit'
 
-      call rone (diff_n,npts)
-      call rone (diff_p,npts)
-      call rone (diff_e,npts)
+      zvalence(1) = -1.0 ! cN
+      zvalence(2) =  1.0 ! cP
 
-      call rone (mu_n  ,npts)
-      call rone (mu_p  ,npts)
-      call rone (mu_e  ,npts)
+      call rone (diff_n(1,1),npts)
+      call rone (diff_n(1,2),npts)
+      call rone (diff_n(1,3),npts)
 
-      call rone (  ni  ,npts)
+      call rone (mu_n(1,1)  ,npts)
+      call rone (mu_n(1,2)  ,npts)
+      call rone (mu_n(1,3)  ,npts)
+
+c      call rone (  ni  ,npts)
       call rone (charge,npts)
 
       call rone(d_permit,npts)
@@ -293,11 +296,11 @@ c-----------------------------------------------------------------------
       linftol(6) = 0.0
 
       if (istep.le.10.or.mod(istep,iocomm).eq.0) then
-         call usersol(time,scn,scp,sce,dummy,dummy,dummy)
+         call usersol(time,scn(1,1),scn(1,2),scn(1,3),dummy,dummy,dummy)
          call usersol(time-dt,spotent,dummy,dummy,dummy,dummy,dummy)
 
-         call cem_error(cN,scN,errN,npts,l2(1),linf(1))
-         call cem_error(cP,scP,errP,npts,l2(2),linf(2))
+         call cem_error(cN(1,1),scN(1,1),errcN(1,1),npts,l2(1),linf(1))
+         call cem_error(cN(1,2),scN(1,2),errcN(1,2),npts,l2(2),linf(2))
          call cem_error(potent,spotent,epotent,npts,l2(4),linf(4))
 
          call userprint(istep,time,dt,l2,linf,cpu_t,cpu_p_t)
