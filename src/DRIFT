@@ -30,24 +30,28 @@ c=====================================================================
 c=====================================================================
 c   Drift  parameters
 c=====================================================================
-     common /dmaterialv/
+      common /dmaterialv/
      $     e_mobility (lpts1),
      $     h_mobility (lpts1),
      $     d_permit (lpts1,lcdim),
      $     d_permea (lpts1,lcdim),
      $     mu_n (lpts1,lcdim),       
      $     diff_n (lpts1,lcdim),
+     $     zvalence (lcdim)       ! i-th electric valence
+      real e_mobility,h_mobility,d_permit,d_permea,mu_n,diff_n,
+     $     zvalence
+
+      common /dmaterialc/
      $     temperature,K_beta,r_coulomb,tau_n,tau_p,tau_cE,
      $     rktime1,scale_time,scale_x,scale_mu,constant_0,
      $     scale_concent,scale_potent,scale_elect,scale_current,
      $     e_charge,epsilon_0,
      $     mu_n0,mu_p0,mu_e0,
      $     N_D,N_A,ni_0,
-     $     cN_0(lpts1),cP_0(lpts1),
-      real e_mobility,h_mobility,d_permit,d_permea,mu_n,diff_n,
-     $     temperature, K_beta,r_coulomb,tau_n,tau_p,tau_cE
-     $     rktime1,scale_time,scale_x,scale_mu,constant_0
-     $     scale_concent,scale_potent,scale_elect,scale_current
+     $     cN_0 (lpts1),cP_0 (lpts1)
+      real temperature,K_beta,r_coulomb,tau_n,tau_p,tau_cE,
+     $     rktime1,scale_time,scale_x,scale_mu,constant_0,
+     $     scale_concent,scale_potent,scale_elect,scale_current,
      $     e_charge,epsilon_0,mu_n0,mu_p0,mu_e0,
      $     N_D,N_A,ni_0,cN_0,cP_0
    
@@ -60,18 +64,16 @@ c=====================================================================
      $     cP2 (lpts1),
      $     cE2 (lpts1),
      $     potent2 (lpts1),
-     $     h1n (lpts1),h2n(lpts1),h3n(lpts1),
-     $     h1p (lpts1),h2p(lpts1),h3p(lpts1),
-     $     h1e (lpts1),h2e(lpts1),h3e(lpts1),
-     $     cN_b (lpts1),
-     $     cP_b (lpts1),
-     $     cE_b (lpts1),
-     $     potent_b (lpts1),
+     $     h1n (lpts1),h2n (lpts1),h3n (lpts1),
+     $     h1p (lpts1),h2p (lpts1),h3p (lpts1),
+     $     h1e (lpts1),h2e (lpts1),h3e (lpts1),
+     $     h1c (lpts,lcdim),h2c (lpts,lcdim)
       real cN1,cP1,cE1,potent1,
      $     cN2,cP2,cE2,potent2,
      $     h1n,h2n,h3n,
      $     h1p,h2p,h3p,
      $     h1e,h2e,h3e,
+     $     h1c,h2c
 
       integer    mxprev
       parameter (mxprev=20)
