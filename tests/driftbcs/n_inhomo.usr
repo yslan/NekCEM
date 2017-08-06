@@ -42,8 +42,8 @@ c-----------------------------------------------------------------------
         ex_cn = exp(1.5+sin(alpha*pi*zz)) ! ex sol for cn
         ex_cp = exp(2.0-sin(alpha*pi*zz)) ! ex sol for cp
 
-        mycn1(i) = exp(1.5) ! + in_turb
-        mycn2(i) = exp(2.0) ! + in_turb
+        mycn1(i) = exp(1.5) !ex_cn  ! + in_turb
+        mycn2(i) = exp(2.0) !ex_cp  ! + in_turb
         mycn3(i) = 0
         mycn4(i) = 0
         mycn5(i) = 0
@@ -100,14 +100,14 @@ c-----------------------------------------------------------------------
       include 'POISSON'
       include 'BCS'
 
-      integer i,j,i0,ic
+      integer i,j,i0,ic 
       real    tt, zz
       real    rhs_cn(1),rhs_cp(1),rhs_ce(1)
       real    rhs_phi(1), dummy1(1),dummy2(1)
       real    zmax,zmin,glmax,glmin
       real    eps, alpha, tmp2, tmp3 ! for constructing exact sol.
       real    cnp_max ! estimating in STERIC
-      real    ex_cn,ex_cp,ex_dcn,ex_dcp
+
       alpha = 1.0
       eps = 1.e-14
       
@@ -137,9 +137,9 @@ c-----------------------------------------------------------------------
             zz = zm1(i0,1,1,1)
          
             if (abs(zz+1).lt.eps) then ! zz=-1
-               cn(i0,2) = exp(2.0-sin(alpha*pi*zz))
+               cN(i0,2) = exp(2.0-sin(alpha*pi*zz))
             elseif (abs(zz-1).lt.eps) then
-               cn(i0,2) = exp(2.0-sin(alpha*pi*zz))
+               cN(i0,2) = exp(2.0-sin(alpha*pi*zz))
             endif
          enddo
 
@@ -149,7 +149,7 @@ c-----------------------------------------------------------------------
 c.....source for potential field (phi) at time
       call rzero(rhs_phi,npts)
       do ic = 1,lcdim
-        call add2s2(rhs_phi,cN(i,ic),zvalence(ic),npts)
+        call add2s2(rhs_phi,cN(1,ic),zvalence(ic),npts)
       enddo
       call add2s2(rhs_phi,charge,1.0,npts)
       call col2(rhs_phi,bmn,npts)
@@ -207,7 +207,9 @@ c... can be modified for inhomogeneous cases
           endif
         enddo
       endif
- 
+
+
+
       return
       end
 c-----------------------------------------------------------------------
@@ -221,7 +223,7 @@ c---------------------------------------------------------------------
       parameter(lt=lx1*ly1*lz1*lelt)
       common /myfields/ perm(lt),diff(lt),distp(lt),psrc(lt)
      $                , phip(lt),phix(lt),phiy(lt),phiz(lt)
-     
+
       integer i,j,k,l,ie,ieg
       real tmp, D_n_max, D_p_max
       real tmp2, tmp3, alpha, ex_cn, ex_cp
