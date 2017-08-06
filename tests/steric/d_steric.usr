@@ -95,7 +95,7 @@ c-----------------------------------------------------------------------
       include 'BCS'
       include 'STERIC'
 
-      integer i,j,i0,nion
+      integer i,j,i0,ic
       real    tt, zz
       real    rhs_cn(1),rhs_cp(1),rhs_ce(1)
       real    rhs_phi(1), dummy1(1),dummy2(1)
@@ -116,9 +116,9 @@ c-----------------------------------------------------------------------
             zz = zm1(i0,1,1,1)
 
             if (abs(zz+1).lt.eps) then
-               cn(i0) = 1.0
+               cn(i0,1) = 1.0
             elseif (abs(zz-1).lt.eps) then
-               cn(i0) = 2.0
+               cn(i0,1) = 2.0
             endif
          enddo
       endif
@@ -131,9 +131,9 @@ c-----------------------------------------------------------------------
             zz = zm1(i0,1,1,1)
          
             if (abs(zz+1).lt.eps) then ! zz=-1
-               cp(i0) = 2.0
+               cn(i0,2) = 2.0
             elseif (abs(zz-1).lt.eps) then
-               cp(i0) = 1.0
+               cn(i0,2) = 1.0
             endif
          enddo
 
@@ -141,13 +141,13 @@ c-----------------------------------------------------------------------
 
 
 c.....source for potential field (phi) at time
-
-      call copy(rhs_phi,cP,npts)
-      call add2s2(rhs_phi,cN,-1.0,npts)
-      call add2s2(rhs_phi,ni,1.0,npts)
+      call rzero(rhs_phi,npts)
+      do ic = 1,lcdim
+        call add2s2(rhs_phi,cN(1,ic),zvalence(ic),npts)
+      enddo
+      call add2s2(rhs_phi,charge,1.0,npts)
       call col2(rhs_phi,bmn,npts)
-
-c.....scale_potent has to be fixed 
+c.....scale_potent has to be fixed
 
       if (ncemface_pec(1).gt.0) then
         do i = 1,ncemface_pec(1)
@@ -164,33 +164,33 @@ c.....scale_potent has to be fixed
 
 c.....STERIC ste_g(i,j) coupling (ci,cj) (cn,cp)=(c1,c2)  <--- FIXME, Lan     
 c     var: ste_g, ste_ap, ste_an
-      nion = LDIMT-1
-      call rzero(ste_g,nion*nion)
+
+      call rzero(s_g,lcdim*lcdim)
 
 
       cnp_max = 2.0 ! max of Cp Cn, > 0
 
-      ste_g(1,1) = 1.0
-      ste_g(2,2) = 1.0
-      ste_g(1,2) = 1.2
-      ste_g(2,1) = 1.2
+      s_g(1,1) = 1.0
+      s_g(2,2) = 1.0
+      s_g(1,2) = 1.2
+      s_g(2,1) = 1.2
 
-      if (ste_g(1,1).gt.0.0) then
-         ste_ac(1,1) = 0.7 * (ste_g(1,1) * cnp_max)
+      if (s_g(1,1).gt.0.0) then
+         s_a(1,1) = 0.7 * (s_g(1,1) * cnp_max)
       else
-         ste_ac(1,1) = 0.0
+         s_a(1,1) = 0.0
       endif     
-      if (ste_g(1,2).gt.0.0) then
-         ste_ac(1,2) = 0.7 * (ste_g(1,2) * cnp_max)
-         ste_ac(2,1) = 0.7 * (ste_g(2,1) * cnp_max)
+      if (s_g(1,2).gt.0.0) then
+         s_a(1,2) = 0.7 * (s_g(1,2) * cnp_max)
+         s_a(2,1) = 0.7 * (s_g(2,1) * cnp_max)
       else
-         ste_ac(1,2) = 0.0
-         ste_ac(2,1) = 0.0
+         s_a(1,2) = 0.0
+         s_a(2,1) = 0.0
       endif     
-      if (ste_g(2,2).gt.0.0) then
-         ste_ac(2,2) = 0.7 * (ste_g(2,2) * cnp_max)
+      if (s_g(2,2).gt.0.0) then
+         s_a(2,2) = 0.7 * (s_g(2,2) * cnp_max)
       else
-         ste_ac(2,2) = 0.0
+         s_a(2,2) = 0.0
       endif
 
  
@@ -208,19 +208,25 @@ c---------------------------------------------------------------------
       common /myfields/ perm(lt),diff(lt),distp(lt),psrc(lt)
      $                , phip(lt),phix(lt),phiy(lt),phiz(lt)
      
-      integer i,j,k,l,ie,ieg
+      integer i,j,k,l,ie,ieg,ic
       real tmp, D_n_max, D_p_max
       real tmp2, tmp3, alpha, ex_cn, ex_cp
+
+      zvalence(1) = -1.0 ! cN
+      zvalence(2) =  1.0 ! cP
 
       D_n_max = 1.0
       D_p_max = 1.0
       alpha = 1.0
       
       do i= 1,npts 
-         d_permit(i)=  1.0
-         d_permea(i)=  1.0
-         mu_n    (i)=  1.0 !D_n_max 
-         mu_p    (i)=  1.0 !D_p_max  
+         d_permit(i,1)=  1.0  ! not used
+         d_permit(i,2)=  1.0  ! not used
+         d_permea(i,1)=  1.0  ! not used
+         d_permea(i,2)=  1.0  ! not used
+
+         mu_n    (i,1)=  1.0 !D_n_max 
+         mu_n    (i,2)=  1.0 !D_p_max  
 
          zz  = zm1(i,1,1,1)
 
@@ -230,14 +236,14 @@ c---------------------------------------------------------------------
          tmp2 =  1.0 * ex_cp
          tmp3 = -1.0 * ex_cn ! negative valence
           
-c         ni(i)=  alpha*alpha*pi*pi*sin(alpha*pi*zz) - tmp2 - tmp3 ! ex sol for Q  
-         ni(i) = 0.0
+c         charge(i)=  alpha*alpha*pi*pi*sin(alpha*pi*zz) - tmp2 - tmp3 ! ex sol for Q 
+         charge(i) = 0.0
 
-         charge(i)=  1.0
       enddo
 
-      call copy(diff_n,mu_n,npts)
-      call copy(diff_p,mu_p,npts)
+      do ic = 1,lcdim
+        call copy(diff_n(1,ic),mu_n(1,ic),npts)
+      enddo
 
       call usersteric
 
@@ -322,12 +328,12 @@ c-----------------------------------------------------------------------
       linftol(6) = 0.0
 
       if (istep.le.10.or.mod(istep,iocomm).eq.0) then
-         call usersol(time,scn,scp,spotent,dummy,dummy,dummy)
+         call usersol(time,scn(1,1),scn(1,2),spotent,dummy,dummy,dummy)
 
-         call add3s2(sumtt,cN,cP,1.0,1.0,npts)
+         call add3s2(sumtt,cN(1,1),cN(1,2),1.0,1.0,npts)
 
-         call cem_error(sumtt ,scN    ,errN   ,npts,l2(1),linf(1))
-         call cem_error(cP    ,scP    ,errP   ,npts,l2(2),linf(2))
+         call cem_error(sumtt  ,scN(1,1),errcN(1,1),npts,l2(1),linf(1))
+         call cem_error(cN(1,2),scN(1,2),errcN(1,2),npts,l2(2),linf(2))
          call cem_error(potent,spotent,epotent,npts,l2(4),linf(4))
 
          call userprint(istep,time,dt,l2,linf,cpu_t,cpu_p_t)
@@ -356,8 +362,8 @@ c-----------------------------------------------------------------------
       integer k
 
       if (nid.eq.0) then
-         write(6,101) istep,nelt,nx1-1,npts,tt,dt,(l2(k),k=1,6),t1,t2
-         write(6,102) istep,nelt,nx1-1,npts,tt,dt,(linf(k),k=1,6),t1,t2
+         write(6,101) istep,nelt,lx1-1,npts,tt,dt,(l2(k),k=1,6),t1,t2
+         write(6,102) istep,nelt,lx1-1,npts,tt,dt,(linf(k),k=1,6),t1,t2
       endif
 
  101  format(/,i10,i6,i4,i9,1p9e10.3,e9.2,' CPU: L2')
@@ -378,7 +384,7 @@ c-----------------------------------------------------------------------
 
       common /mygeom/ xmin,xmax,ymin,ymax,zmin,zmax
 
-      n=nx1*ny1*nz1*nelt
+      n=lx1*ly1*lz1*nelt
 
       call domain_size(xmin,xmax,ymin,ymax,zmin,zmax)
 
@@ -444,7 +450,7 @@ c---------------------------------------------------------------------
       include 'SIZE'
       include 'TOTAL'
 
-      n = nx1*ny1*nz1*nelt
+      n = lx1*ly1*lz1*lelt
 
       xmin = glmin(xm1,n)
       xmax = glmax(xm1,n)

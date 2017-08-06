@@ -27,7 +27,7 @@ c---------------------------------------------------------------------
                              
       if (icalled.eq.0) then
         do ic = 1,lcdim
-          call cmult2 (h1c(1,1),diff_n(1,ic),dt,npts) ! h1n= h1n * (diff_n*dt)
+          call cmult2 (h1c(1,ic),diff_n(1,ic),dt,npts) ! h1n= h1n * (diff_n*dt)
           call rone (h2c(1,ic),npts)             ! h2n= 1.0
         enddo
 
@@ -44,7 +44,7 @@ c---------------------------------------------------------------------
          enddo
 c        icalled = 1! If not Dirichlet, need uptate each loop 
 
-       endif
+      endif
 
 c...  set cggo parameters
 
@@ -56,7 +56,7 @@ c...  set cggo parameters
 c...  get rhs for cN and cP
 
       call cem_drift_rhs_bdf1_steric ! note: output change to resC and ionC
-      
+
 C     boundary surface integral
       do ic=1,lcdim
          call bcneusc0(rescn(1,ic),mu_n(1,ic),cN(1,ic),npts,ic+1,1)
@@ -152,8 +152,8 @@ c         call copy(resC(1,2),resP,npts)
 
 C     Adding STERIC terms, Lan
 
-      do i=1,nion
-         do j=1,nion
+      do i=1,lcdim
+         do j=1,lcdim
             ! g_h1(i,j) = c_i * ste_g(i,j) - ste_sc(i,j)
             call cmult2(g_h1(1,i,j),cN(1,i),s_g(i,j),npts)
             call add2s2(g_h1(1,i,j),h1o,-1.0*s_a(i,j),npts)
@@ -162,8 +162,8 @@ C     Adding STERIC terms, Lan
       enddo
 
       ! res_i = res_i - dt * mu_i sum_j{ [c_i ste_g(i,j) - ste_ac(i,j)] * dC_j }
-      do i=1,nion
-         do j=1,nion
+      do i=1,lcdim
+         do j=1,lcdim
             call rzero(tmp,npts)
             call axhelm3(tmp,cN(1,j),g_h1(1,i,j),h2z,1,1)
             call add2s2 (rescn(1,i),tmp,-1.0*dt,npts)
