@@ -33,8 +33,8 @@ c=====================================================================
       common /dmaterialv/
      $     e_mobility (lpts1),
      $     h_mobility (lpts1),
-     $     d_permit (lpts1,lcdim),
-     $     d_permea (lpts1,lcdim),
+     $     d_permit (lpts1),
+     $     d_permea (lpts1),
      $     mu_n (lpts1,lcdim),       
      $     diff_n (lpts1,lcdim),
      $     zvalence (lcdim)       ! i-th electric valence

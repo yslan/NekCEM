@@ -156,7 +156,8 @@ c---------------------------------------------------------------------
       include 'DRIFT'
       include 'POISSON'      
 
-      real tmp_cN(lpts1,lcdim),tmp_po(lpts1) ! Rishardson
+      integer ic
+      real tmp_cN(lpts1,lcdim),tmp_po(lpts1)  ! Rishardson
       real tmp2_cN(lpts1,lcdim),tmp2_po(lpts1)!
 
       if     (ifbdf1) then    
@@ -194,12 +195,14 @@ c        endif
 
       elseif (ifbdf1r) then ! richardson
 
+        do ic = 1,lcdim
+          call copy(tmp_cN(1,ic),cN(1,ic),npts)
+        enddo
+        call copy(tmp_po,potent,npts)
+
 C       half time step and do twice
         dt = 0.5*dt
 
-        call copy(tmp_cN,cN,lpts1*lcdim)
-        call copy(tmp_po,potent,npts)
-
         call cem_drift_source  
         call cem_drift_poisson 
         if (ifsteric) then
@@ -216,13 +219,17 @@ C       half time step and do twice
           call cem_drift_sem_bdf1
         endif
 
-        call copy(tmp2_cN,cN,lpts1*lcdim)
+        do ic = 1,lcdim
+          call copy(tmp2_cN(1,ic),cN(1,ic),npts)
+        enddo
         call copy(tmp2_po,potent,npts)
 
 C       origin BDF1
         dt = 2*dt
 
-        call copy(cN,tmp_cN,lpts1*lcdim)
+        do ic = 1,lcdim
+          call copy(cN(1,ic),tmp_cN(1,ic),npts)
+        enddo
         call copy(potent,tmp_po,npts)
 
         call cem_drift_source  
@@ -234,10 +241,14 @@ C       origin BDF1
         endif
 
 C       Richarson iter:  cN = 2* r2half_cN - bdf(cN,dt)
-        call cmult(tmp2_cN,2.0,npts)
+        do ic = 1,lcdim
+          call cmult(tmp2_cN(1,ic),2.0,npts)
+        enddo
         call cmult(tmp2_po,2.0,npts)
 
-        call add2s1(cN,tmp2_cN,-1.0,npts)
+        do ic = 1,lcdim
+          call add2s1(cN(1,ic),tmp2_cN(1,ic),-1.0,npts)
+        enddo
         call add2s1(potent,tmp2_po,-1.0,npts)
        
         return
