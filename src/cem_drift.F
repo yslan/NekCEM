@@ -158,7 +158,7 @@ c---------------------------------------------------------------------
 
       integer ic
       real tmp_cN(lpts1,lcdim),tmp_po(lpts1)  ! Rishardson
-      real tmp2_cN(lpts1,lcdim),tmp2_po(lpts1)!
+      real r2_cN(lpts1,lcdim),r2_po(lpts1)!
 
       if     (ifbdf1) then    
         
@@ -195,14 +195,14 @@ c        endif
 
       elseif (ifbdf1r) then ! richardson
 
+C       half time step and do twice
+        dt = 0.5*dt
+
         do ic = 1,lcdim
           call copy(tmp_cN(1,ic),cN(1,ic),npts)
         enddo
         call copy(tmp_po,potent,npts)
 
-C       half time step and do twice
-        dt = 0.5*dt
-
         call cem_drift_source  
         call cem_drift_poisson 
         if (ifsteric) then
@@ -220,12 +220,12 @@ C       half time step and do twice
         endif
 
         do ic = 1,lcdim
-          call copy(tmp2_cN(1,ic),cN(1,ic),npts)
+          call copy(r2_cN(1,ic),cN(1,ic),npts)
         enddo
-        call copy(tmp2_po,potent,npts)
+        call copy(r2_po,potent,npts)
 
 C       origin BDF1
-        dt = 2*dt
+        dt = 2.0*dt
 
         do ic = 1,lcdim
           call copy(cN(1,ic),tmp_cN(1,ic),npts)
@@ -242,15 +242,15 @@ C       origin BDF1
 
 C       Richarson iter:  cN = 2* r2half_cN - bdf(cN,dt)
         do ic = 1,lcdim
-          call cmult(tmp2_cN(1,ic),2.0,npts)
+          call cmult(r2_cN(1,ic),2.0,npts)
         enddo
-        call cmult(tmp2_po,2.0,npts)
+        call cmult(r2_po,2.0,npts)
 
         do ic = 1,lcdim
-          call add2s1(cN(1,ic),tmp2_cN(1,ic),-1.0,npts)
+          call add2s1(cN(1,ic),r2_cN(1,ic),-1.0,npts)
         enddo
-        call add2s1(potent,tmp2_po,-1.0,npts)
-       
+        call add2s1(potent,r2_po,-1.0,npts)
+
         return
 
       endif
@@ -429,7 +429,7 @@ c---------------------------------------------------------------------
         do ic = 1,lcdim
           call cmult2 (h1c(1,ic),diff_n(1,ic),dt,npts) ! h1n= h1n * (diff_n*dt)
         enddo
-        icalled = 1
+c        icalled = 1 ! bdf1r
       endif
 
       do ic = 1,lcdim
