@@ -127,9 +127,9 @@ c.... setup multiplicity
       call dssum   (mult,lx1,ly1,lz1)
       call invcol1 (mult,npts)
 
-c      if (abs(param(1)).ne.0) then   ! todo restr Newton later
-c        call cem_drift_newton
-c      endif
+      if (abs(param(1)).ne.0) then   ! todo restr Newton later
+        call cem_drift_newton
+      endif
 
       return
       end
