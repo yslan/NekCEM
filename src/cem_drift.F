@@ -54,7 +54,7 @@ c...  these to be deleted all when IFHEX/IFTET are done
       call rzero (spotent,npts)
       call rzero (epotent,npts)
 
-      call rzero (errcN ,lpts1*lcdim)
+      call rzero (errcN,lpts1*lcdim)
       call rzero (kcN  ,lpts1*lcdim)
       call rzero (qbm1 ,npts)
 
@@ -113,7 +113,7 @@ c...  inverse mass matrix including material constants
       if (ifrestart) then
          call restart_swap
       else
-         call userini(time,cN(1,1),cN(1,2),dummy,dummy,dummy,dummy)
+         call userini(time,dummy,cN,dummy,dummy,dummy,dummy)
       endif
 
 c.... setup masks for multi-fields for drift
@@ -271,7 +271,7 @@ c----------------------------------------------------------------------
 
       real dummy(lx1*ly1*lz1*lelt)
 
-      call usersrc (time,rescN(1,1),rescN(1,2),dummy,rhs,dummy,dummy)
+      call usersrc (time,rhs,rescN,dummy,dummy,dummy,dummy)
 
       return
       end
@@ -412,27 +412,94 @@ c---------------------------------------------------------------------
       include 'ZPER'
       include 'BCS'
 
-      integer  i,j,i0,isd,imsh,maxit,ic
-      real     wk1(lpts),wk2(lpts), tol,glamax
-      real     diff_n_dt(lpts), diff_p_dt(lpts),diff_e_dt(lpts)
-      real     dtbdi_n(lpts), dtbdi_p(lpts),dtbdi_e(lpts)
-      integer  icalled
-      save     icalled
-      data     icalled/0/
+      integer ic
+c      integer  i,j,i0,isd,imsh,maxit,ic
+c      real     wk1(lpts),wk2(lpts), tol,glamax
+c      integer  icalled
+c      save     icalled
+c      data     icalled/0/
+c
+c      real wa (lx1*ly1*lz1*lelt)
+c      real wb (lx1*ly1*lz1*lelt)
+c
+      npts= lx1*ly1*lz1*nelt 
+c                             
+c      if (icalled.eq.0) then
+c        do ic = 1,lcdim
+c          call cmult2 (h1c(1,ic),diff_n(1,ic),dt,npts) ! h1n= h1n * (diff_n*dt)
+c        enddo
+c        icalled = 1 ! bdf1r
+c      endif
+c
+c      do ic = 1,lcdim
+c        call rone (h2c(1,ic),npts)             ! h2n= 1.0
+c      enddo
 
-      real wa (lx1*ly1*lz1*lelt)
-      real wb (lx1*ly1*lz1*lelt)
+c...  set cggo parameters
+
+c      isd = 1
+c      imsh = 1
+c      maxit = 5000
+c      tol = param(22)
+
+      call cem_drift_sem_bdf1_init
+
+c...  get rhs for cN and cP
+
+      do ic = 1,lcdim
+        call cem_drift_rhs_bdf1(ic)
+        call cem_drift_lhs_bdf1(ic)
+      enddo
+
+c      do ic = 1,lcdim
+c        call bcneusc0 (rescn(1,ic),mu_n(1,ic),cn(1,ic),npts,ic+1,1)
+c      enddo
+
+c...  solve cn
+
+c      do ic = 1,lcdim
+c        call bcneusc (wa,npts,ic+1,-1)
+c        call col2 (wa,h1c(1,ic),npts)
+c        call add2 (h2c(1,ic),wa,npts)
+c        call bcdirsc (cn(1,ic),npts,ic+1)
+c        call axhelm3 (wa,cn(1,ic),h1c(1,ic),h2c(1,ic),1,1)
+c        call sub3 (wb,rescN(1,ic),wa,npts) 
+c        call bcneusc (wa,npts,ic+1,1)
+c        call col2 (wa,h1c(1,ic),npts) 
+c        call add2 (wb,wa,npts) 
+c
+c        call dssum (wb,lx1,ly1,lz1)
+c        call col2 (wb,dmask(1,ic+1),npts)
+c        call cggo2(wa,wb,h1c(1,ic),h2c(1,ic)
+c     $       ,mult,dmask(1,ic+1),imsh,isd,npts,tol,maxit)
+c        call add2 (cn(1,ic),wa,npts)
+c      enddo
+
+      return
+      end
+
+c---------------------------------------------------------------------
+      subroutine cem_drift_sem_bdf1_init
+c---------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'POISSON'
+      include 'DRIFT'
+      include 'ZPER'
+      include 'BCS'
+
+      common /SEMBDF1i/ isd,imsh,maxit
+      common /SEMBDF1r/ tol
+      integer  isd,imsh,maxit
+      real     tol
+
+      integer ic 
 
       npts= lx1*ly1*lz1*nelt 
                              
-      if (icalled.eq.0) then
-        do ic = 1,lcdim
-          call cmult2 (h1c(1,ic),diff_n(1,ic),dt,npts) ! h1n= h1n * (diff_n*dt)
-        enddo
-c        icalled = 1 ! bdf1r
-      endif
-
       do ic = 1,lcdim
+        call cmult2 (h1c(1,ic),diff_n(1,ic),dt,npts) ! h1n= h1n * (diff_n*dt)
         call rone (h2c(1,ic),npts)             ! h2n= 1.0
       enddo
 
@@ -443,37 +510,52 @@ c...  set cggo parameters
       maxit = 5000
       tol = param(22)
 
-c...  get rhs for cN and cP
+      return
+      end
+c---------------------------------------------------------------------
+      subroutine cem_drift_lhs_bdf1(ic)
+c---------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'POISSON'
+      include 'DRIFT'
+      include 'ZPER'
+      include 'BCS'
 
-      call cem_drift_rhs_bdf1
-      do ic = 1,lcdim
-        call bcneusc0 (rescn(1,ic),mu_n(1,ic),cn(1,ic),npts,ic+1,1)
-      enddo
+      common /SEMBDF1i/ isd,imsh,maxit
+      common /SEMBDF1r/ tol
+      integer  isd,imsh,maxit
+      real     tol
+
+      integer ic
+      real wa (lx1*ly1*lz1*lelt)
+      real wb (lx1*ly1*lz1*lelt)
+
+      call bcneusc0 (rescn(1,ic),mu_n(1,ic),cn(1,ic),npts,ic+1,1)
 
 c...  solve cn
+      
+      call bcneusc (wa,npts,ic+1,-1)
+      call col2 (wa,h1c(1,ic),npts)
+      call add2 (h2c(1,ic),wa,npts)
+      call bcdirsc (cn(1,ic),npts,ic+1)
+      call axhelm3 (wa,cn(1,ic),h1c(1,ic),h2c(1,ic),1,1)
+      call sub3 (wb,rescN(1,ic),wa,npts) 
+      call bcneusc (wa,npts,ic+1,1)
+      call col2 (wa,h1c(1,ic),npts) 
+      call add2 (wb,wa,npts) 
 
-      do ic = 1,lcdim
-        call bcneusc (wa,npts,ic+1,-1)
-        call col2 (wa,h1c(1,ic),npts)
-        call add2 (h2c(1,ic),wa,npts)
-        call bcdirsc (cn(1,ic),npts,ic+1)
-        call axhelm3 (wa,cn(1,ic),h1c(1,ic),h2c(1,ic),1,1)
-        call sub3 (wb,rescN(1,ic),wa,npts) 
-        call bcneusc (wa,npts,ic+1,1)
-        call col2 (wa,h1c(1,ic),npts) 
-        call add2 (wb,wa,npts) 
-
-        call dssum (wb,lx1,ly1,lz1)
-        call col2 (wb,dmask(1,ic+1),npts)
-        call cggo2(wa,wb,h1c(1,ic),h2c(1,ic)
-     $       ,mult,dmask(1,ic+1),imsh,isd,npts,tol,maxit)
-        call add2 (cn(1,ic),wa,npts)
-      enddo
+      call dssum (wb,lx1,ly1,lz1)
+      call col2 (wb,dmask(1,ic+1),npts)
+      call cggo2(wa,wb,h1c(1,ic),h2c(1,ic)
+     $     ,mult,dmask(1,ic+1),imsh,isd,npts,tol,maxit)
+      call add2 (cn(1,ic),wa,npts)
 
       return
       end
 c---------------------------------------------------------------------
-      subroutine cem_drift_rhs_bdf1
+      subroutine cem_drift_rhs_bdf1(ic)
 c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
@@ -487,7 +569,7 @@ c-----------------------------------------------------------------------
 
       call rzero(w_h2,npts)
 
-      do ic = 1,lcdim
+c      do ic = 1,lcdim
         call col3 (wn,cn(1,ic),bm1,npts)
         call add2s1 (rescN(1,ic),wn,dt,npts) ! resN=cN+dt*(resN) with weights
 
@@ -498,7 +580,7 @@ c...  and add it to the right-hand-side
         call col3(w_h1,cn(1,ic),mu_n(1,ic),npts) ! wk_h1n= mu_n * cN
         call axhelm3(wn,potent,w_h1,w_h2,1,1)
         call add2s2 (rescN(1,ic),wn,-1.0*zvalence(ic)*dt,npts)
-      enddo
+c      enddo
 
       return
       end

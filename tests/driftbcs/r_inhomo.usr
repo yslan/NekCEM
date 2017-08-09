@@ -22,9 +22,10 @@ c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
       include 'SIZE'
       include 'TOTAL'
+      include 'DRIFT'
       real zz
-      real mycn1(lx1*ly1*lz1*lelt) !cn
-      real mycn2(lx1*ly1*lz1*lelt) !cp
+      real mycn1(lx1*ly1*lz1*lelt)  ! potent
+      real mycn2(lx1*ly1*lz1*lelt,lcdim) !cn
       real mycn3(lx1*ly1*lz1*lelt)
       real mycn4(lx1*ly1*lz1*lelt)
       real mycn5(lx1*ly1*lz1*lelt)
@@ -42,8 +43,8 @@ c-----------------------------------------------------------------------
         ex_cn = exp(1.5+sin(alpha*pi*zz)) ! ex sol for cn
         ex_cp = exp(2.0-sin(alpha*pi*zz)) ! ex sol for cp
 
-        mycn1(i) = exp(1.5) !ex_cn  ! + in_turb
-        mycn2(i) = exp(2.0) !ex_cp  ! + in_turb
+        mycn2(i,1) = exp(1.5) !ex_cn  ! + in_turb
+        mycn2(i,2) = exp(2.0) !ex_cp  ! + in_turb
         mycn3(i) = 0
         mycn4(i) = 0
         mycn5(i) = 0
@@ -61,8 +62,8 @@ c-----------------------------------------------------------------------
       include 'DRIFT'
 
       real tt
-      real myscn1(lx1*ly1*lz1*lelt)
-      real myscn2(lx1*ly1*lz1*lelt)
+      real myscn1(lx1*ly1*lz1*lelt) !potent
+      real myscn2(lx1*ly1*lz1*lelt,lcdim) !cN
       real myscn3(lx1*ly1*lz1*lelt)
       real myscn4(lx1*ly1*lz1*lelt)
       real myscn5(lx1*ly1*lz1*lelt)
@@ -80,9 +81,9 @@ c-----------------------------------------------------------------------
          ex_cn = exp(1.5+sin(alpha*pi*zz)) ! ex sol for cn
          ex_cp = exp(2.0-sin(alpha*pi*zz)) ! ex sol for cp
 
-         myscn1(i) = ex_cn
-         myscn2(i) = ex_cp
-         myscn3(i) = sin(alpha*pi*zz) ! ex sol for phi  
+         myscn2(i,1) = ex_cn
+         myscn2(i,2) = ex_cp
+         myscn1(i) = sin(alpha*pi*zz) ! ex sol for phi  
       enddo
 
 
@@ -91,7 +92,7 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
-      subroutine usersrc(tt,rhs_cn,rhs_cp,rhs_ce,rhs_phi,dummy1,dummy2)     
+      subroutine usersrc(tt,rhs_phi,rhs_cn,dummy1,dummy2,dummy3,dummy4)     
 c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
@@ -102,8 +103,9 @@ c-----------------------------------------------------------------------
 
       integer i,j,i0,ic 
       real    tt, zz
-      real    rhs_cn(1),rhs_cp(1),rhs_ce(1)
+      real    rhs_cn(lpts1,lcdim)
       real    rhs_phi(1), dummy1(1),dummy2(1)
+      real    dummy3(1),dummy4(1)
       real    zmax,zmin,glmax,glmin
       real    eps, alpha, tmp2, tmp3 ! for constructing exact sol.
       real    cnp_max ! estimating in STERIC
@@ -112,8 +114,8 @@ c-----------------------------------------------------------------------
       alpha = 1.0
       eps = 1.e-14
       
-      call rzero(rhs_cN,npts)
-      call rzero(rhs_cP,npts)
+      call rzero(rhs_cN(1,1),npts)
+      call rzero(rhs_cN(1,2),npts)
 
       if (ncemface_pec(2).ge.1)  then ! second field  cn 
 
@@ -396,7 +398,7 @@ c-----------------------------------------------------------------------
       linftol(6) = 0.0
 
       if (istep.le.10.or.mod(istep,iocomm).eq.0) then
-         call usersol(time,scn(1,1),scn(1,2),spotent,dummy,dummy,dummy)
+         call usersol(time,spotent,scn,dummy,dummy,dummy,dummy)
 
          call cem_error(cN(1,1),scN(1,1),errcN(1,1),npts,l2(1),linf(1))
          call cem_error(cN(1,2),scN(1,2),errcN(1,2),npts,l2(2),linf(2))

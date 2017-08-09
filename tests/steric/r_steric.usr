@@ -22,9 +22,10 @@ c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
       include 'SIZE'
       include 'TOTAL'
+      include 'DRIFT'
       real zz
-      real mycn1(lx1*ly1*lz1*lelt) !cn
-      real mycn2(lx1*ly1*lz1*lelt) !cp
+      real mycn1(lx1*ly1*lz1*lelt) !potent
+      real mycn2(lx1*ly1*lz1*lelt,lcdim) !cn
       real mycn3(lx1*ly1*lz1*lelt)
       real mycn4(lx1*ly1*lz1*lelt)
       real mycn5(lx1*ly1*lz1*lelt)
@@ -35,8 +36,8 @@ c-----------------------------------------------------------------------
       do i = 1,npts
         zz = zm1(i,1,1,1)
 
-        mycn1(i) =  0.5*(zz+1)+1
-        mycn2(i) = -0.5*(zz+1)+2
+        mycn2(i,1) =  0.5*(zz+1)+1
+        mycn2(i,2) = -0.5*(zz+1)+2
         mycn3(i) = 0
         mycn4(i) = 0
         mycn5(i) = 0
@@ -55,8 +56,8 @@ c-----------------------------------------------------------------------
       include 'STERIC'
 
       real tt
-      real myscn1(lx1*ly1*lz1*lelt)
-      real myscn2(lx1*ly1*lz1*lelt)
+      real myscn1(lx1*ly1*lz1*lelt) ! potent
+      real myscn2(lx1*ly1*lz1*lelt,lcdim) ! cN
       real myscn3(lx1*ly1*lz1*lelt)
       real myscn4(lx1*ly1*lz1*lelt)
       real myscn5(lx1*ly1*lz1*lelt)
@@ -74,9 +75,9 @@ c-----------------------------------------------------------------------
          ex_cn = exp(1.5+sin(alpha*pi*zz)) ! ex sol for cn
          ex_cp = exp(2.0-sin(alpha*pi*zz)) ! ex sol for cp
 
-         myscn1(i) = 3.0           ! cN + cP \approx 3
-         myscn2(i) = -0.5*(zz+1)+2 
-         myscn3(i) = -0.5*(zz+1)+2   
+         myscn2(i,1) = 3.0           ! cN + cP \approx 3
+         myscn2(i,2) = -0.5*(zz+1)+2 
+         myscn1(i) = -0.5*(zz+1)+2   
       enddo
 
 
@@ -85,7 +86,7 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
-      subroutine usersrc(tt,rhs_cn,rhs_cp,rhs_ce,rhs_phi,dummy1,dummy2)     
+      subroutine usersrc(tt,rhs_phi,rhs_cn,dummy1,dummy2,dummy3,dummy4)     
 c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
@@ -97,8 +98,9 @@ c-----------------------------------------------------------------------
 
       integer i,j,i0,ic
       real    tt, zz
-      real    rhs_cn(1),rhs_cp(1),rhs_ce(1)
+      real    rhs_cn(lpts1,lcdim)
       real    rhs_phi(1), dummy1(1),dummy2(1)
+      real    dummy3(1),dummy4(1)
       real    zmax,zmin,glmax,glmin
       real    eps, alpha, tmp2, tmp3 ! for constructing exact sol.
       real    cnp_max ! estimating in STERIC
@@ -106,8 +108,8 @@ c-----------------------------------------------------------------------
 
       eps = 1.e-14
 
-      call rzero(rhs_cN,npts)
-      call rzero(rhs_cP,npts)
+      call rzero(rhs_cN(1,1),npts)
+      call rzero(rhs_cN(1,2),npts)
 
       if (ncemface_pec(2).ge.1)  then ! second field  cn 
 
@@ -431,7 +433,7 @@ c-----------------------------------------------------------------------
       linftol(6) = 0.0
 
       if (istep.le.10.or.mod(istep,iocomm).eq.0) then
-         call usersol(time,scn(1,1),scn(1,2),spotent,dummy,dummy,dummy)
+         call usersol(time,spotent,scn,dummy,dummy,dummy,dummy)
 
          call add3s2(sumtt,cN(1,1),cN(1,2),1.0,1.0,npts)
 
