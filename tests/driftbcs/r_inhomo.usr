@@ -18,18 +18,13 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
-      subroutine userini(tt,mycn1,mycn2,mycn3,mycn4,mycn5,mycn6)
+      subroutine userini(tt,mycn)
 c-----------------------------------------------------------------------
       include 'SIZE'
       include 'TOTAL'
       include 'DRIFT'
       real zz
-      real mycn1(lx1*ly1*lz1*lelt)  ! potent
-      real mycn2(lx1*ly1*lz1*lelt,lcdim) !cn
-      real mycn3(lx1*ly1*lz1*lelt)
-      real mycn4(lx1*ly1*lz1*lelt)
-      real mycn5(lx1*ly1*lz1*lelt)
-      real mycn6(lx1*ly1*lz1*lelt)
+      real mycn(lx1*ly1*lz1*lelt,lcdim) !cn
 
       integer i
       real alpha,ex_cn,ex_cp,in_turb 
@@ -43,12 +38,8 @@ c-----------------------------------------------------------------------
         ex_cn = exp(1.5+sin(alpha*pi*zz)) ! ex sol for cn
         ex_cp = exp(2.0-sin(alpha*pi*zz)) ! ex sol for cp
 
-        mycn2(i,1) = exp(1.5) !ex_cn  ! + in_turb
-        mycn2(i,2) = exp(2.0) !ex_cp  ! + in_turb
-        mycn3(i) = 0
-        mycn4(i) = 0
-        mycn5(i) = 0
-        mycn6(i) = 0
+        mycn(i,1) = exp(1.5) !ex_cn  ! + in_turb
+        mycn(i,2) = exp(2.0) !ex_cp  ! + in_turb
       enddo
 
       return

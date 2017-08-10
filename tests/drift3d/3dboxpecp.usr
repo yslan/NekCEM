@@ -18,7 +18,7 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
-      subroutine userini(tt,mycn,mycp,myce,myex,myey,myez)
+      subroutine userini(tt,mycn)
 c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
@@ -27,12 +27,7 @@ c-----------------------------------------------------------------------
       include 'POISSON'
 
       real tt
-      real mycn(lpts) !potent
-      real mycp(lpts,lcdim) !cn
-      real myce(lpts)
-      real myex(lpts)
-      real myey(lpts)
-      real myez(lpts)
+      real mycn(lpts,lcdim) !cn
       real xx,yy,zz,tmp
       integer i
 
@@ -43,12 +38,8 @@ c-----------------------------------------------------------------------
          yy = ym1(i,1,1,1)
          zz = zm1(i,1,1,1)
          tmp = sin(pi*xx)*sin(pi*yy)*sin(pi*zz)*sin(tt)
-         mycp(i,1) = tmp**2
-         mycp(i,2) = 2.0*tmp**2
-c         mycp(i,3) = 0.0
-         myex(i) = 0.0
-         myey(i) = 0.0
-         myez(i) = 0.0
+         mycn(i,1) = tmp**2
+         mycn(i,2) = 2.0*tmp**2
       enddo
 
       return
@@ -63,8 +54,8 @@ c-----------------------------------------------------------------------
 
       real tt
       real myscn1(lpts) ! potent
-      real myscn2(lpts,lcdim) !cN
-      real myscn3(lpts)
+      real myscn2(lpts) ! cN
+      real myscn3(lpts) ! cP
       real myscn4(lpts)
       real myscn5(lpts)
       real myscn6(lpts)
@@ -77,10 +68,9 @@ c-----------------------------------------------------------------------
          yy = ym1(i,1,1,1)
          zz = zm1(i,1,1,1)
          tmp = sin(pi*xx)*sin(pi*yy)*sin(pi*zz)*sin(tt)
-         myscn1(i)   = tmp**2
-         myscn2(i,1) = tmp**2
-         myscn2(i,2) = 2.0*tmp**2
-         myscn3(i) = 0.0
+         myscn1(i) = tmp**2     !potent
+         myscn2(i) = tmp**2     !cN
+         myscn3(i) = 2.0*tmp**2 !cP
          myscn4(i) = 0.0
          myscn5(i) = 0.0
          myscn6(i) = 0.0
@@ -335,8 +325,8 @@ c-----------------------------------------------------------------------
       linftol(6) = 0.0
 
       if (istep.le.10.or.mod(istep,iocomm).eq.0) then
-         call usersol(time,dummy,scn,dummy,dummy,dummy,dummy)
-         call usersol(time-dt,spotent,dummy2,dummy,dummy,dummy,dummy)
+         call usersol(time,dummy,scn(1,1),scn(1,2),dummy,dummy,dummy)
+         call usersol(time-dt,spotent,dummy,dummy,dummy,dummy,dummy)
 
          call cem_error(cN(1,1),scN(1,1),errcN(1,1),npts,l2(1),linf(1))
          call cem_error(cN(1,2),scN(1,2),errcN(1,2),npts,l2(2),linf(2))

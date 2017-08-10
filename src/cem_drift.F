@@ -113,7 +113,7 @@ c...  inverse mass matrix including material constants
       if (ifrestart) then
          call restart_swap
       else
-         call userini(time,dummy,cN,dummy,dummy,dummy,dummy)
+         call userini(time,cN)
       endif
 
 c.... setup masks for multi-fields for drift
@@ -413,67 +413,14 @@ c---------------------------------------------------------------------
       include 'BCS'
 
       integer ic
-c      integer  i,j,i0,isd,imsh,maxit,ic
-c      real     wk1(lpts),wk2(lpts), tol,glamax
-c      integer  icalled
-c      save     icalled
-c      data     icalled/0/
-c
-c      real wa (lx1*ly1*lz1*lelt)
-c      real wb (lx1*ly1*lz1*lelt)
-c
       npts= lx1*ly1*lz1*nelt 
-c                             
-c      if (icalled.eq.0) then
-c        do ic = 1,lcdim
-c          call cmult2 (h1c(1,ic),diff_n(1,ic),dt,npts) ! h1n= h1n * (diff_n*dt)
-c        enddo
-c        icalled = 1 ! bdf1r
-c      endif
-c
-c      do ic = 1,lcdim
-c        call rone (h2c(1,ic),npts)             ! h2n= 1.0
-c      enddo
-
-c...  set cggo parameters
-
-c      isd = 1
-c      imsh = 1
-c      maxit = 5000
-c      tol = param(22)
 
       call cem_drift_sem_bdf1_init
-
-c...  get rhs for cN and cP
 
       do ic = 1,lcdim
         call cem_drift_rhs_bdf1(ic)
         call cem_drift_lhs_bdf1(ic)
       enddo
-
-c      do ic = 1,lcdim
-c        call bcneusc0 (rescn(1,ic),mu_n(1,ic),cn(1,ic),npts,ic+1,1)
-c      enddo
-
-c...  solve cn
-
-c      do ic = 1,lcdim
-c        call bcneusc (wa,npts,ic+1,-1)
-c        call col2 (wa,h1c(1,ic),npts)
-c        call add2 (h2c(1,ic),wa,npts)
-c        call bcdirsc (cn(1,ic),npts,ic+1)
-c        call axhelm3 (wa,cn(1,ic),h1c(1,ic),h2c(1,ic),1,1)
-c        call sub3 (wb,rescN(1,ic),wa,npts) 
-c        call bcneusc (wa,npts,ic+1,1)
-c        call col2 (wa,h1c(1,ic),npts) 
-c        call add2 (wb,wa,npts) 
-c
-c        call dssum (wb,lx1,ly1,lz1)
-c        call col2 (wb,dmask(1,ic+1),npts)
-c        call cggo2(wa,wb,h1c(1,ic),h2c(1,ic)
-c     $       ,mult,dmask(1,ic+1),imsh,isd,npts,tol,maxit)
-c        call add2 (cn(1,ic),wa,npts)
-c      enddo
 
       return
       end
@@ -489,11 +436,6 @@ c---------------------------------------------------------------------
       include 'ZPER'
       include 'BCS'
 
-      common /SEMBDF1i/ isd,imsh,maxit
-      common /SEMBDF1r/ tol
-      integer  isd,imsh,maxit
-      real     tol
-
       integer ic 
 
       npts= lx1*ly1*lz1*nelt 
@@ -502,13 +444,6 @@ c---------------------------------------------------------------------
         call cmult2 (h1c(1,ic),diff_n(1,ic),dt,npts) ! h1n= h1n * (diff_n*dt)
         call rone (h2c(1,ic),npts)             ! h2n= 1.0
       enddo
-
-c...  set cggo parameters
-
-      isd = 1
-      imsh = 1
-      maxit = 5000
-      tol = param(22)
 
       return
       end
@@ -523,8 +458,6 @@ c---------------------------------------------------------------------
       include 'ZPER'
       include 'BCS'
 
-      common /SEMBDF1i/ isd,imsh,maxit
-      common /SEMBDF1r/ tol
       integer  isd,imsh,maxit
       real     tol
 
@@ -545,6 +478,13 @@ c...  solve cn
       call bcneusc (wa,npts,ic+1,1)
       call col2 (wa,h1c(1,ic),npts) 
       call add2 (wb,wa,npts) 
+
+c...  set cggo parameters
+
+      isd = 1
+      imsh = 1
+      maxit = 5000
+      tol = param(22)
 
       call dssum (wb,lx1,ly1,lz1)
       call col2 (wb,dmask(1,ic+1),npts)

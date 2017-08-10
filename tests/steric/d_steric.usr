@@ -18,31 +18,21 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
-      subroutine userini(tt,mycn1,mycn2,mycn3,mycn4,mycn5,mycn6)
+      subroutine userini(tt,mycn)
 c-----------------------------------------------------------------------
       include 'SIZE'
       include 'TOTAL'
       include 'DRIFT'
       real zz
-      real mycn1(lx1*ly1*lz1*lelt) !potent
-      real mycn2(lx1*ly1*lz1*lelt,lcdim) !cn
-      real mycn3(lx1*ly1*lz1*lelt)
-      real mycn4(lx1*ly1*lz1*lelt)
-      real mycn5(lx1*ly1*lz1*lelt)
-      real mycn6(lx1*ly1*lz1*lelt)
+      real mycn(lx1*ly1*lz1*lelt,lcdim) !cn
 
       integer i
 
       do i = 1,npts
         zz = zm1(i,1,1,1)
 
-        mycn1 = 0
-        mycn2(i,1) =  0.5*(zz+1)+1
-        mycn2(i,2) = -0.5*(zz+1)+2
-        mycn3(i) = 0
-        mycn4(i) = 0
-        mycn5(i) = 0
-        mycn6(i) = 0
+        mycn(i,1) =  0.5*(zz+1)+1
+        mycn(i,2) = -0.5*(zz+1)+2
       enddo
 
       return
