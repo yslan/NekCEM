@@ -54,7 +54,7 @@ c         mycp(i,3) = 0.0
       return
       end
 c-----------------------------------------------------------------------
-      subroutine usersol(tt,myscn,myscp,mysce,mysex,mysey,mysez)
+      subroutine usersol(tt,myscn1,myscn2,myscn3,myscn4,myscn5,myscn6)
 c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
@@ -62,12 +62,12 @@ c-----------------------------------------------------------------------
       include 'DRIFT'
 
       real tt
-      real myscN(lpts) ! potent
-      real myscP(lpts,lcdim) !cN
-      real myscE(lpts)
-      real mysex(lpts)
-      real mysey(lpts)
-      real mysez(lpts)
+      real myscn1(lpts) ! potent
+      real myscn2(lpts,lcdim) !cN
+      real myscn3(lpts)
+      real myscn4(lpts)
+      real myscn5(lpts)
+      real myscn6(lpts)
 
       real xx,yy,zz,tmp
       integer i
@@ -77,12 +77,13 @@ c-----------------------------------------------------------------------
          yy = ym1(i,1,1,1)
          zz = zm1(i,1,1,1)
          tmp = sin(pi*xx)*sin(pi*yy)*sin(pi*zz)*sin(tt)
-         myscP(i,1) = tmp**2
-         myscP(i,2) = 2.0*tmp**2
-c         myscP(i,3) = 0.0
-         mysex(i) = 0.0
-         mysey(i) = 0.0
-         mysez(i) = 0.0
+         myscn1(i)   = tmp**2
+         myscn2(i,1) = tmp**2
+         myscn2(i,2) = 2.0*tmp**2
+         myscn3(i) = 0.0
+         myscn4(i) = 0.0
+         myscn5(i) = 0.0
+         myscn6(i) = 0.0
       enddo
 
       return

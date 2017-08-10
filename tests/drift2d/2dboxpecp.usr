@@ -74,7 +74,8 @@ c-----------------------------------------------------------------------
          xx = xm1(i,1,1,1)
          yy = ym1(i,1,1,1)
          tmp = sin(pi*xx)*sin(tt)
-         myscn2(i,1) = tmp**2     ! cN or potent
+         myscn1(i) = tmp**2       ! potent
+         myscn2(i,1) = tmp**2     ! cN
          myscn2(i,2) = 2.0*tmp**2 ! cP
          myscn3(i) = 0.0        ! dummy
          myscn4(i) = 0.0        ! dummy
