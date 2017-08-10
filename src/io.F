@@ -242,10 +242,12 @@ c...  this produces output for (io-option=iparam) with timing info
          !FIXME: restr DRIFT, Lan
          call vtk_nonswap_field(cN(1,1),cN(1,2),potent,vtkout1)
          call vtk_nonswap_field(scN(1,1),scN(1,2),spotent,vtkout2)
-         call vtk_nonswap_field(cnj(1,1,1),cnj(1,2,1),cnj(1,3,1)
-     $        ,vtkout3)
-         call vtk_nonswap_field(cnj(1,1,2),cnj(1,2,2),cnj(1,3,2)
-     $        ,vtkout4)
+c         call vtk_nonswap_field(cnj(1,1,1),cnj(1,2,1),cnj(1,3,1)
+         call vtk_nonswap_field(cN(1,3),cN(1,4),potent,vtkout3)
+         call vtk_nonswap_field(scN(1,3),scN(1,4),potent,vtkout4)
+c     $        ,vtkout3)
+c         call vtk_nonswap_field(cnj(1,1,2),cnj(1,2,2),cnj(1,3,2)
+c     $        ,vtkout4)
 #elif defined MAXWELL
          call vtk_nonswap_field(EN(1,1),EN(1,2),EN(1,3),vtkout1)
          call vtk_nonswap_field(HN(1,1),HN(1,2),HN(1,3),vtkout2)
