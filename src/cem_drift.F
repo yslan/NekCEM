@@ -38,9 +38,7 @@ c...  these to be deleted all when IFHEX/IFTET are done
       call rzero (jacm,npts)
 
       call rzero (cN   ,lpts1*lcdim)
-      call rzero (cN1  ,npts)
-      call rzero (cP1  ,npts)
-      call rzero (cE1  ,npts)
+      call rzero (cN1  ,lpts1*lcdim)
       call rzero (scN  ,lpts1*lcdim)
       call rzero (gradp,lpts13)
       call rzero (cNJ  ,lpts13*lcdim)
@@ -69,7 +67,7 @@ c...  these to be deleted all when IFHEX/IFTET are done
       call rzero (unym ,nxzfl)
       call rzero (unzm ,nxzfl)
       call rzero (aream,nxzfl)
-      call rzero (approx_o,npts21)
+c      call rzero (approx_o,npts21)
 
       do i=1,npts
          xmn (i)= xm1 (i,1,1,1)
@@ -171,15 +169,44 @@ c---------------------------------------------------------------------
         endif
         return
 
-      elseif (ifbdf1r) then ! richardson
+      elseif (ifbdf2) then
 
-C       half time step and do twice
-        dt = 0.5*dt
+        if (istep.eq.1) then 
+c          dt = dt/2
+
+          do ic = 1,lcdim
+            call copy (cN1(1,ic),cN(1,ic),npts)
+          enddo
+          call cem_drift_source 
+          call cem_drift_poisson 
+          call cem_drift_sem_bdf1
+          call copy (potent1,potent,npts) 
+          call copy (gradp1(1,1),gradp(1,1),npts) 
+          call copy (gradp1(1,2),gradp(1,2),npts) 
+          call copy (gradp1(1,3),gradp(1,3),npts) 
+
+c          time = time-dt ! will add dt later in time advancing
+c          dt = 2.0*dt
+
+        else
+
+          call cem_drift_source  
+          call cem_drift_poisson 
+          call cem_drift_sem_bdf2
+
+        endif
+
+        return
+
+      elseif (ifbdf1r) then ! richardson
 
         do ic = 1,lcdim
           call copy(tmp_cN(1,ic),cN(1,ic),npts)
         enddo
         call copy(tmp_po,potent,npts)
+
+C       half time step and do twice: tn-1 > tn-1/2 > tn
+        dt = 0.5*dt
 
         call cem_drift_source  
         call cem_drift_poisson 
@@ -188,6 +215,8 @@ C       half time step and do twice
         else 
           call cem_drift_sem_bdf1
         endif
+
+        time = time+dt
 
         call cem_drift_source  
         call cem_drift_poisson 
@@ -202,7 +231,9 @@ C       half time step and do twice
         enddo
         call copy(r2_po,potent,npts)
 
-C       origin BDF1
+        time = time-dt
+
+C       origin BDF1: tn-1 > tn
         dt = 2.0*dt
 
         do ic = 1,lcdim
@@ -218,7 +249,7 @@ C       origin BDF1
           call cem_drift_sem_bdf1
         endif
 
-C       Richarson iter:  cN = 2* r2half_cN - bdf(cN,dt)
+C       Richarson:  cN = 2* r2half_cN - bdf(cN,dt)
         do ic = 1,lcdim
           call cmult(r2_cN(1,ic),2.0,npts)
         enddo
@@ -443,9 +474,7 @@ c---------------------------------------------------------------------
       real wa (lx1*ly1*lz1*lelt)
       real wb (lx1*ly1*lz1*lelt)
 
-      call bcneusc0 (rescn(1,ic),mu_n(1,ic),cn(1,ic),npts,ic+1,1)
-
-c...  solve cn
+c...  deal with BCs
       
       call bcneusc (wa,npts,ic+1,-1)
       call col2 (wa,h1c(1,ic),npts)
@@ -481,24 +510,209 @@ c-----------------------------------------------------------------------
       include 'DRIFT'
       include 'POISSON'
       include 'BCS'
-      real wn(lpts), wp(lpts)
-      real w_h1(lpts),w_h2(lpts)
+      real wtmp(lpts1)
+      real w_h1(lpts1),w_h2(lpts1)
       integer ic
 
       call rzero(w_h2,npts)
 
-c      do ic = 1,lcdim
-        call col3 (wn,cn(1,ic),bm1,npts)
-        call add2s1 (rescN(1,ic),wn,dt,npts) ! resN=cN+dt*(resN) with weights
+      call col3 (wtmp,cn(1,ic),bm1,npts)
+      call add2s1 (rescN(1,ic),wtmp,dt,npts) ! resN=cN+dt*(resN) with weights
 
 c...  resN=resN -zN wN: (wN= -cn\grad\Phi,\grad v), h1= mu_n*cN, h2=0
 c...  resP=resP -zP wP: (wP=  cp\grad\Phi,\grad v), h1= mu_p*cP, h2=0
 c...  compute the nonlinear terms: cN*(grad(phi),cP*(grad(phi)
 c...  and add it to the right-hand-side
-        call col3(w_h1,cn(1,ic),mu_n(1,ic),npts) ! wk_h1n= mu_n * cN
-        call axhelm3(wn,potent,w_h1,w_h2,1,1)
-        call add2s2 (rescN(1,ic),wn,-1.0*zvalence(ic)*dt,npts)
-c      enddo
+      call col3(w_h1,cn(1,ic),mu_n(1,ic),npts) ! wk_h1n= mu_n * cN
+      call axhelm3(wtmp,potent,w_h1,w_h2,1,1)
+      call add2s2 (rescN(1,ic),wtmp,-1.0*zvalence(ic)*dt,npts)
+
+C     boundary integral  from old info
+      call bcneusc0 (rescn(1,ic),mu_n(1,ic),cn(1,ic),npts,ic+1,1)
+
+      return
+      end
+c---------------------------------------------------------------------
+      subroutine cem_drift_sem_bdf2 !todo: restr. later
+c---------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'POISSON'
+      include 'DRIFT'
+      include 'ZPER'
+
+      character*4  name
+      character*4  cname
+      character*6  name6
+
+      logical ifwt,ifvec
+
+      integer  ic,isd,imsh,maxit
+      real     tol
+
+      npts= nx1*ny1*nz1*nelt ! FIXME misun 9/16/2014 <-- somehow updated
+                             ! once gmres_mg is called. This is temporary!
+
+c...    elliptic: 2nd + constant+ 1st
+
+      do ic = 1,lcdim
+        call cmult2(h1c(1,ic),diff_n(1,ic),dt,npts)
+        call rone  (h2c(1,ic),npts)
+        call cmult (h2c(1,ic),1.5,npts)
+      enddo
+
+      if (istep.eq.1) then
+        if (nid.eq.0) write(6,*) 'initial first two step first'
+        call exitt(1)
+        return
+      endif
+
+!FIXME - MJO - 5/9/15 - Skipped ifgfdmdd for acc
+c...  param(25)=1: this is a direct solver using global fast diagonal algorothm
+c      if  (IFGFDMDD)     then
+c         call cem_drift_rhs_bdf2
+c         do ic = 1,lcdim
+c           do i = 1,npts
+c           diff_n_dt(i,ic)= diff_n(i,ic)*dt
+c           dtbdi_n(i,ic)  = 1.0/diff_n_dt(i,ic)
+c           enddo
+c           call col2 (rescN(1,ic),dtbdi_n(1,ic),npts)  ! scaling rhs: rhsN = rhsN/(diff_n_dt)
+c           do i = 1,npts
+c           dtbdi_n(i,ic)  = 1.5/diff_n_dt(i,ic)
+c           enddo
+c         enddo
+c         call copy(potent1,potent,npts)  ! save potent1 = potent (istep-1)
+c         do ic = 1,lcdim
+c           call copy(cN1(1,ic),cN(1,ic),npts)          ! save cN1= cN(istep-1)
+c         enddo
+c         do ic = 1,lcdim
+c         call gfdm_pres_solv(cN(1,ic),rescN(1,ic),wk1,wk2,.false.
+c     $        ,-dtbdi_n(1,ic)) !fixme kwave2= 1/diff_n_dt 
+c         enddo
+c
+c      endif
+
+
+      call add3s2 (extr_gradp(1,1),gradp(1,1),gradp1(1,1),2.0,-1.0,npts)
+      call add3s2 (extr_gradp(1,2),gradp(1,2),gradp1(1,2),2.0,-1.0,npts)
+      call add3s2 (extr_gradp(1,3),gradp(1,3),gradp1(1,3),2.0,-1.0,npts)
+
+c...  setting before solving the linear system
+      call cem_drift_rhs_bdf2
+
+C     After computing rhs, update cN1 before solving cN
+      call copy(potent1,potent,npts)
+      do ic = 1,lcdim
+        call copy(cN1(1,ic),cN(1,ic),npts)
+      enddo
+
+      call copy(gradp1(1,1),gradp(1,1),npts)
+      call copy(gradp1(1,2),gradp(1,2),npts)
+      call copy(gradp1(1,3),gradp(1,3),npts)
+c...  choose unsteady time-dependent solver
+c...  param(24)=  1 (GMRES),  2 (CG):
+c...  param(24)= -1 (GMRES), -2 (CG): negative sign with projection method
+
+c      isd   = 1
+c      imsh  = 1
+c      tol   = param(22)
+c      maxit = 5000
+c      ifwt  = .true.
+c      ifvec = .false.
+
+      do ic = 1,lcdim
+        call cem_drift_lhs_bdf1(ic) ! same to bdf1
+      enddo
+
+c...  CG + projection
+      if     (param(24).eq.(-2)) then
+c        do ic = 1,lcdim
+c          call project1(rescN(1,ic),npts,approx_n(1,1,ic),
+c     $                  napprox_n(1,ic),h1c(1,ic),h2c(1,ic),
+c     $                  dmask(1,ic+1),mult,ifwt,ifvec,'c_n 1 ')
+c          call cggo2   (cN(1,ic),rescN(1,ic),h1c(1,ic),h2c(1,ic),mult,
+c     $                  dmask(1,2),imsh,isd,npts,tol,maxit)
+c          call project2(cN(1,ic),rescN(1,ic),npts,approx_n(1,1,ic),
+c     $                  napprox_n(1,ic),h1c(1,ic),h2c(1,ic),
+c     $                  dmask(1,ic+1),mult,ifwt,ifvec,'c_n 2 ')
+c        enddo
+c...  GMRES + projection
+      elseif (param(24).eq.(-1)) then
+c        do ic = 1,lcdim
+c          call project1(rescN(1,ic),npts,approx_n(1,1,ic),
+c     $                  napprox_n(1,ic),h1c(1,ic),h2c(1,ic),
+c     $                  dmask(1,ic+1),mult,ifwt,ifvec,'c_n 1 ')
+c          call drift_hmh_gmres2 (cN(1,ic),rescN(1,ic),h1c(1,ic),
+c     $                  h2c(1,ic),mult,dmask(1,ic+1),isd,imsh,npts,tol)
+c          call project2(cN(1,ic),rescN(1,ic),npts,approx_n(1,1,ic),
+c     $                  napprox_n(1,ic),h1c(1,ic),h2c(1,ic),
+c     $                  dmask(1,ic+1),mult,ifwt,ifvec,'c_n 2 ')
+c        enddo
+c... CG
+      elseif (param(24).eq.2) then
+c        do ic = 1,lcdim
+c          call cggo2 (cN(1,ic),rescN(1,ic),h1c(1,ic),h2c(1,ic),
+c     $                mult,dmask(1,ic+1),imsh,isd,npts,tol,maxit)
+c        enddo
+c...  GMRES
+      elseif (param(24).eq.1) then
+c        do ic = 1,lcdim
+c          call drift_hmh_gmres2 (cN(1,ic),rescN(1,ic),h1c(1,ic),
+c     $                   h2c(1,ic),mult,dmask(1,ic+1),isd,imsh,npts,tol)
+c        enddo
+      else
+        if (nid.eq.0) write(6,*) 'define param(24) for unsteady solver'
+        call exitt(1)
+      endif
+
+      return
+      end
+c---------------------------------------------------------------------
+      subroutine cem_drift_rhs_bdf2 !todo: restr later
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'DRIFT'
+      include 'POISSON'
+
+      integer ic
+
+      real extr_pot(lpts1,lcdim)
+      real extr_cN (lpts1,lcdim)
+      real wk_cN   (lpts1,lcdim)
+      real w_h1    (lpts1)
+      real w_h2    (lpts1)
+      real wtmp    (lpts1)
+
+      call rzero(w_h2,npts)
+
+!$ACC DATA CREATE(wk_cN,extr_pot,extr_cN,w_h1,w_h2,wtmp)
+      do ic = 1,lcdim
+      call add3s2 (wk_cN(1,ic),cN(1,ic),cN1(1,ic),2.0,-0.5,npts)
+      call col2   (wk_cN(1,ic),bm1,npts)      !wk_cN=2.0*cN-0.5*cN1 with weights information
+
+      call add2s1 (rescN(1,ic),wk_cN(1,ic),dt,npts) !rescN = rescN + 2.0*cN-0.5*cN1
+      enddo
+
+c...  nonlinear terms
+      do ic = 1,lcdim
+        call add3s2 (extr_cN(1,ic),cN(1,ic),cN1(1,ic),2.0,-1.0,npts)
+      enddo
+      call add3s2 (extr_pot,potent,potent1,2.0,-1.0,npts)
+
+      do ic = 1,lcdim
+        call col3(w_h1,extr_cN(1,ic),mu_n(1,ic),npts)
+        call axhelm3(wtmp,extr_pot,w_h1,w_h2,1,1)!wk_cN1=(cn\grad\Phi,\grad v)
+        call add2s2 (rescN(1,ic),wtmp,-1.0*zvalence(ic)*dt,npts)
+      enddo
+
+      do ic = 1,lcdim
+        call bcneusc2(rescN(1,ic),mu_n(1,ic),extr_cn(1,ic),extr_gradp
+     $       ,npts,ic+1,1)
+      enddo
+!$ACC END DATA
 
       return
       end
@@ -1759,6 +1973,53 @@ c-----------------------------------------------------------------------
             k = cemface(j)
             tmp = gradp(k,1)*unxm(j)+gradp(k,2)*unym(j)
      $          + gradp(k,3)*unzm(j)
+            wa(k) = wa(k) 
+     $            - tmp*zvalence(ifld_c)*dt*wc(k)*wb(k)*aream(j)
+          enddo
+        endif
+
+      endif
+      
+      return
+      end
+c-----------------------------------------------------------------------
+c     this should be aready included in bc_flux as current flux 
+c     this routine is tempory for bdf2, Lan
+      subroutine bcneusc2 (wa,wb,wc,gradx,n,ifld,itype)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'DRIFT'
+      include 'POISSON'
+      include 'BCS'
+      integer n,ifld,ifld_c,itype
+      real wa(lpts1),wb(lpts1),wc(lpts1)
+      real gradx(lpts1,3) ! grad. of any x
+      real tmp
+      integer i,j,k
+
+      ifld_c = ifld-1
+
+      if (itype.eq.1) then
+
+        if (ncemface_rob(ifld).gt.0) then
+          do i = 1,ncemface_rob(ifld)
+            j = cemface_rob(i,ifld)
+            k = cemface(j)
+            tmp = gradx(k,1)*unxm(j)+gradx(k,2)*unym(j)
+     $          + gradx(k,3)*unzm(j)
+            wa(k) = wa(k) 
+     $            - tmp*zvalence(ifld_c)*dt*wc(k)*wb(k)*aream(j)
+          enddo
+        endif
+
+        if (ncemface_nmn(ifld).gt.0) then
+          do i = 1,ncemface_nmn(ifld)
+            j = cemface_nmn(i,ifld)
+            k = cemface(j)
+            tmp = gradx(k,1)*unxm(j)+gradx(k,2)*unym(j)
+     $          + gradx(k,3)*unzm(j)
             wa(k) = wa(k) 
      $            - tmp*zvalence(ifld_c)*dt*wc(k)*wb(k)*aream(j)
           enddo
