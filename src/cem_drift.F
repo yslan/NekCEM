@@ -528,7 +528,7 @@ c...  and add it to the right-hand-side
       call add2s2 (rescN(1,ic),wtmp,-1.0*zvalence(ic)*dt,npts)
 
 C     boundary integral  from old info
-      call bcneusc0 (rescn(1,ic),mu_n(1,ic),cn(1,ic),npts,ic+1,1)
+      call bcneusc0 (rescn(1,ic),mu_n(1,ic),cn(1,ic),gradp,npts,ic+1,1)
 
       return
       end
@@ -542,11 +542,11 @@ c---------------------------------------------------------------------
       include 'DRIFT'
       include 'ZPER'
 
-      character*4  name
-      character*4  cname
-      character*6  name6
+c      character*4  name
+c      character*4  cname
+c      character*6  name6
 
-      logical ifwt,ifvec
+c     logical ifwt,ifvec
 
       integer  ic,isd,imsh,maxit
       real     tol
@@ -610,61 +610,10 @@ C     After computing rhs, update cN1 before solving cN
       call copy(gradp1(1,1),gradp(1,1),npts)
       call copy(gradp1(1,2),gradp(1,2),npts)
       call copy(gradp1(1,3),gradp(1,3),npts)
-c...  choose unsteady time-dependent solver
-c...  param(24)=  1 (GMRES),  2 (CG):
-c...  param(24)= -1 (GMRES), -2 (CG): negative sign with projection method
-
-c      isd   = 1
-c      imsh  = 1
-c      tol   = param(22)
-c      maxit = 5000
-c      ifwt  = .true.
-c      ifvec = .false.
 
       do ic = 1,lcdim
         call cem_drift_lhs_bdf1(ic) ! same to bdf1
       enddo
-
-c...  CG + projection
-      if     (param(24).eq.(-2)) then
-c        do ic = 1,lcdim
-c          call project1(rescN(1,ic),npts,approx_n(1,1,ic),
-c     $                  napprox_n(1,ic),h1c(1,ic),h2c(1,ic),
-c     $                  dmask(1,ic+1),mult,ifwt,ifvec,'c_n 1 ')
-c          call cggo2   (cN(1,ic),rescN(1,ic),h1c(1,ic),h2c(1,ic),mult,
-c     $                  dmask(1,2),imsh,isd,npts,tol,maxit)
-c          call project2(cN(1,ic),rescN(1,ic),npts,approx_n(1,1,ic),
-c     $                  napprox_n(1,ic),h1c(1,ic),h2c(1,ic),
-c     $                  dmask(1,ic+1),mult,ifwt,ifvec,'c_n 2 ')
-c        enddo
-c...  GMRES + projection
-      elseif (param(24).eq.(-1)) then
-c        do ic = 1,lcdim
-c          call project1(rescN(1,ic),npts,approx_n(1,1,ic),
-c     $                  napprox_n(1,ic),h1c(1,ic),h2c(1,ic),
-c     $                  dmask(1,ic+1),mult,ifwt,ifvec,'c_n 1 ')
-c          call drift_hmh_gmres2 (cN(1,ic),rescN(1,ic),h1c(1,ic),
-c     $                  h2c(1,ic),mult,dmask(1,ic+1),isd,imsh,npts,tol)
-c          call project2(cN(1,ic),rescN(1,ic),npts,approx_n(1,1,ic),
-c     $                  napprox_n(1,ic),h1c(1,ic),h2c(1,ic),
-c     $                  dmask(1,ic+1),mult,ifwt,ifvec,'c_n 2 ')
-c        enddo
-c... CG
-      elseif (param(24).eq.2) then
-c        do ic = 1,lcdim
-c          call cggo2 (cN(1,ic),rescN(1,ic),h1c(1,ic),h2c(1,ic),
-c     $                mult,dmask(1,ic+1),imsh,isd,npts,tol,maxit)
-c        enddo
-c...  GMRES
-      elseif (param(24).eq.1) then
-c        do ic = 1,lcdim
-c          call drift_hmh_gmres2 (cN(1,ic),rescN(1,ic),h1c(1,ic),
-c     $                   h2c(1,ic),mult,dmask(1,ic+1),isd,imsh,npts,tol)
-c        enddo
-      else
-        if (nid.eq.0) write(6,*) 'define param(24) for unsteady solver'
-        call exitt(1)
-      endif
 
       return
       end
@@ -709,7 +658,7 @@ c...  nonlinear terms
       enddo
 
       do ic = 1,lcdim
-        call bcneusc2(rescN(1,ic),mu_n(1,ic),extr_cn(1,ic),extr_gradp
+        call bcneusc0(rescN(1,ic),mu_n(1,ic),extr_cn(1,ic),extr_gradp
      $       ,npts,ic+1,1)
       enddo
 !$ACC END DATA
@@ -1939,7 +1888,7 @@ c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
 c     this should be aready included in bc_flux as current flux 
 c     this routine is tempory
-      subroutine bcneusc0 (wa,wb,wc,n,ifld,itype) 
+      subroutine bcneusc0 (wa,wb,wc,gradx,n,ifld,itype) 
 c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
@@ -1949,6 +1898,7 @@ c-----------------------------------------------------------------------
       include 'BCS'
       integer n,ifld,ifld_c,itype
       real wa(lpts),wb(lpts),wc(lpts)
+      real gradx(lpts,3)
       real tmp
       integer i,j,k
 
@@ -1960,8 +1910,8 @@ c-----------------------------------------------------------------------
           do i = 1,ncemface_rob(ifld)
             j = cemface_rob(i,ifld)
             k = cemface(j)
-            tmp = gradp(k,1)*unxm(j)+gradp(k,2)*unym(j)
-     $          + gradp(k,3)*unzm(j)
+            tmp = gradx(k,1)*unxm(j)+gradx(k,2)*unym(j)
+     $          + gradx(k,3)*unzm(j)
             wa(k) = wa(k) 
      $            - tmp*zvalence(ifld_c)*dt*wc(k)*wb(k)*aream(j)
           enddo
@@ -1971,8 +1921,8 @@ c-----------------------------------------------------------------------
           do i = 1,ncemface_nmn(ifld)
             j = cemface_nmn(i,ifld)
             k = cemface(j)
-            tmp = gradp(k,1)*unxm(j)+gradp(k,2)*unym(j)
-     $          + gradp(k,3)*unzm(j)
+            tmp = gradx(k,1)*unxm(j)+gradx(k,2)*unym(j)
+     $          + gradx(k,3)*unzm(j)
             wa(k) = wa(k) 
      $            - tmp*zvalence(ifld_c)*dt*wc(k)*wb(k)*aream(j)
           enddo

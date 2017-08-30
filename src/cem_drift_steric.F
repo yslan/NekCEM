@@ -59,7 +59,8 @@ c...  get rhs for cN and cP
 
 C     boundary surface integral
       do ic=1,lcdim
-         call bcneusc0(rescn(1,ic),mu_n(1,ic),cN(1,ic),npts,ic+1,1)
+         call bcneusc0(rescn(1,ic),mu_n(1,ic),cN(1,ic)
+     $        ,gradp,npts,ic+1,1)
          call cem_drift_grad(gradc(1,1,ic),gradc(1,2,ic),gradc(1,3,ic)
      $        ,cN(1,ic))
       enddo
