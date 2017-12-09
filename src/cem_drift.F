@@ -418,13 +418,31 @@ c---------------------------------------------------------------------
       include 'ZPER'
       include 'BCS'
 
-      integer ic 
+      integer lt
+      parameter(lt=lx1*ly1*lz1*lelt)
+      common /myPQRfields/ distp(lt),psrc(lt),phip(lt),qstep(lt)
+      real distp,psrc,phip,qstep
+
+      integer ic,i
+      real pen(lx1*ly1*lz1*lelt)
+
 
       npts= lx1*ly1*lz1*nelt 
                              
       do ic = 1,lcdim
         call cmult2 (h1c(1,ic),diff_n(1,ic),dt,npts) ! h1n= h1n * (diff_n*dt)
         call rone (h2c(1,ic),npts)             ! h2n= 1.0
+      enddo
+
+C     Penalty, add pen*(C^{n+1} to lhs)
+      call rzero (pen,npts)
+      do i = 1,npts
+        if (qstep(i).lt.0.9) then
+          pen(i) = (lxi*(lxi+1)/2)**2
+        endif
+      enddo
+      do ic = 1,lcdim
+        call add2(h2c(i,ic),pen,npts)
       enddo
 
       return
