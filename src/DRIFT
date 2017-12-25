@@ -37,9 +37,10 @@ c=====================================================================
      $     d_permea (lpts1),
      $     mu_n (lpts1,lcdim),       
      $     diff_n (lpts1,lcdim),
-     $     zvalence (lcdim)       ! i-th electric valence
+     $     zvalence (lcdim),         ! i-th electric valence
+     $     gzval (lpts1,lcdim)       ! i-th electric valence, global
       real e_mobility,h_mobility,d_permit,d_permea,mu_n,diff_n,
-     $     zvalence
+     $     zvalence,gzval
 
       common /dmaterialc/
      $     temperature,K_beta,r_coulomb,tau_n,tau_p,tau_cE,

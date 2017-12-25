@@ -1,0 +1,1218 @@
+c-----------------------------------------------------------------------
+c
+c  USER SPECIFIED ROUTINES:
+c
+c     - boundary conditions
+c     - initial conditions
+c     - variable properties
+c     - forcing function for fluid (f)
+c     - forcing function for passive scalar (q)
+c     - general purpose routine for checking errors etc.
+c
+c-----------------------------------------------------------------------
+      subroutine userinc
+c-----------------------------------------------------------------------
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userini(tt,mycn)
+c-----------------------------------------------------------------------
+      include 'SIZE'
+      include 'TOTAL'
+      include 'DRIFT'
+      include 'POISSON'
+
+      integer lt
+      parameter(lt=lx1*ly1*lz1*lelt)
+      common /myPQRfields/ distp(lt),psrc(lt),phip(lt),qstep(lt)
+     $                   , distpr1(lt),distpr2(lt),dlayers(lt)
+     $                   , pqrshape(lt)
+      real distp,psrc,phip,qstep
+     $   , distpr1,distpr2,dlayers,pqrshape   
+
+      common /GetStep/ stepf(lt),stepm(lt),step1(lt),step2(lt)
+      real stepf,stepm,step1,step2
+
+      real zz
+      real mycn1(lx1*ly1*lz1*lelt) ! potent
+      real mycn(lx1*ly1*lz1*lelt,lcdim) ! cN
+      real mycn3(lx1*ly1*lz1*lelt)
+      real mycn4(lx1*ly1*lz1*lelt)
+      real mycn5(lx1*ly1*lz1*lelt)
+      real mycn6(lx1*ly1*lz1*lelt)
+
+      integer ie,i,j
+      real alpha,ex_cn,ex_cp,in_turb
+      real tmp,tmp1
+      real xx,yy
+      real n_avo
+
+      npts = lx1*ly1*lz1*nelt
+
+      n_avo = 6.022141E23
+
+      tmp1= 1E26
+      tmp = 100*n_avo / scale_concent
+
+
+      do j = 1,npts
+c          if (stepf(j).le.0.999) then
+          if (qstep(j).le.0.9) then
+             cN(j,1) = 0.0
+             cN(j,2) = 0.0
+             potent(j) = 0.0
+         else
+             cN(j,1) = tmp !0.0
+             cN(j,2) = tmp   !abs(charge(j))/scale_concent
+             potent(j) = 0.0 !charge(j)
+        endif
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usersol(tt,myscn1,myscn2,myscn3,myscn4,myscn5,myscn6)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'POISSON'
+      include 'DRIFT'
+
+      integer lt
+      parameter(lt=lx1*ly1*lz1*lelt)
+      common /GetStep/ stepf(lt),stepm(lt),step1(lt),step2(lt)
+      real stepf,stepm,step1,step2
+
+      common /myPQRfields/ distp(lt),psrc(lt),phip(lt),qstep(lt)
+     $                   , distpr1(lt),distpr2(lt),dlayers(lt)
+     $                   , pqrshape(lt)
+      real distp,psrc,phip,qstep
+     $   , distpr1,distpr2,dlayers,pqrshape   
+
+      real tt
+      real myscn1(lx1*ly1*lz1*lelt) !potent
+      real myscn2(lx1*ly1*lz1*lelt,lcdim) !cN
+      real myscn3(lx1*ly1*lz1*lelt)
+      real myscn4(lx1*ly1*lz1*lelt)
+      real myscn5(lx1*ly1*lz1*lelt)
+      real myscn6(lx1*ly1*lz1*lelt)
+
+
+c      call copy(myscn2(1,1),stepf,npts)        ! scN X
+c      call copy(myscn2(1,2),stepm,npts)        ! scP Y
+c      call copy(myscn1,d_permit,npts)          ! spotent Z
+
+      call copy(myscn2(1,1),charge,npts)       ! scN X
+      call copy(myscn2(1,2),diff_n(1,2),npts)  ! scP Y
+      call copy(myscn1,d_permit,npts)          ! spotent Z
+
+c      call copy(myscn2(1,1),distp,npts)        ! scN X
+c      call copy(myscn2(1,2),distpr1,npts)      ! scP Y
+c      call copy(myscn1,distpr2,npts)           ! spotent Z
+
+c      call copy(cN(1,1),dlayers,npts)
+c      call copy(cN(1,2),pqrshape,npts)
+c      call copy(potent,d_permit,npts)
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usersrc(tt,rhs_phi,rhs_cn,dummy1,dummy2,dummy3,dummy4)     
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'DRIFT'
+      include 'POISSON'
+      include 'BCS'
+
+      integer i,j,i0,ic 
+      real    tt,uu,zz
+      real    rhs_cn(lpts1,lcdim)
+      real    rhs_phi(1),dummy1(1),dummy2(1)
+      real    dummy3(1),dummy4(1)
+      real    zmax,zmin,glmax,glmin
+      real    tmp,eps,alpha,tmp1,tmp2, tmp3 ! for constructing exact sol.
+      real    cnp_max ! estimating in STERIC
+      real    n_avo
+
+      real phi_L
+
+      n_avo = 6.022141e+23
+      alpha = 1.0
+      eps = 1.e-14
+      
+      phi_L = param(2)
+c      if (nid.eq.0) write(*,*)'Lan phi_L',phi_L
+
+      call rzero(rhs_cN(1,1),npts)
+      call rzero(rhs_cN(1,2),npts)
+
+      zmax = glmax(zm1,npts)
+      zmin = glmin(zm1,npts)
+
+      tmp1= 1E26
+      tmp = tmp1/scale_concent
+
+      if (ncemface_pec(2).ge.1)  then ! second field  cn 
+         do i=1,ncemface_pec(2)
+            j = cemface_pec(i,2)
+            i0 = cemface(j)
+            tmp1 = abs(charge(i0))
+
+            cN(i0,1) = 100.0*n_avo /scale_concent 
+         enddo
+      endif
+
+      if (ncemface_pec(3).ge.1)  then ! third field cp
+         do i=1,ncemface_pec(3)
+            j = cemface_pec(i,3) 
+            i0 = cemface(j)      
+            tmp1 = abs(charge(i0))
+
+            cN(i0,2) = 100.0*n_avo /scale_concent 
+         enddo
+      endif
+
+c.....source for potential field (phi) at time
+      call rzero(rhs_phi,npts)
+      if (param(9).eq.5) then
+        do ic = 1,lcdim
+          call addcol3(rhs_phi,cN(1,ic),gzval(1,ic),npts)
+        enddo
+      else
+        do ic = 1,lcdim
+          call add2s2(rhs_phi,cN(1,ic),zvalence(ic),npts)
+        enddo
+      endif
+      call add2(rhs_phi,charge,npts)
+      call col2(rhs_phi,bmn,npts)
+
+c.....scale_potent has to be fixed 
+      if (ncemface_pec(1).gt.0) then
+        do i = 1,ncemface_pec(1)
+          j = cemface_pec(i,1) 
+          i0 = cemface(j)               ! surface index to volume index
+          zz = zm1(i0,1,1,1)
+          uu = phi_L*(zmax-zz)/(zmax-zmin)/scale_potent
+
+          potent(i0) = uu
+        enddo
+      endif
+
+      do i = 1,npts ! experimental
+        cN(i,1) = abs(cN(i,1))
+        cN(i,2) = abs(cN(i,2))
+      enddo
+
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine uservp (ix,iy,iz,iel)
+c---------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'DRIFT'
+      include 'POISSON'
+
+      integer lt
+      parameter(lt=lx1*ly1*lz1*lelt)
+      common /myPQRfields/ distp(lt),psrc(lt),phip(lt),qstep(lt)
+     $                   , distpr1(lt),distpr2(lt),dlayers(lt)
+     $                   , pqrshape(lt)
+      real distp,psrc,phip,qstep
+     $   , distpr1,distpr2,dlayers,pqrshape   
+
+      common /GetStep/ stepf(lt),stepm(lt),step1(lt),step2(lt)
+      real stepf,stepm,step1,step2
+
+      integer i,j,k,l,ie,ic
+      integer ix,iy,iz,iel
+      real D_n_max,D_p_max
+      real tmp,tmp1,tmp2,tmp3,alpha,ex_cn,ex_cp
+      real const_cdenc,r_c,debye2_0
+
+      real scale_xc,debye,n_avo,scale_charge
+      real val,diff_1,diff_2,diff_0,small_diff
+      real small_perm,big_perm
+
+      npts = lx1*ly1*lz1*nelt
+
+      if (param(9).eq.5) then ! tmp, by Lan
+        do i=1,npts
+          if (qstep(i).le.0.9) then
+            gzval(i,1) =  0.0 ! cN
+            gzval(i,2) =  0.0 ! cP
+          else
+            gzval(i,1) = -1.0 ! cN
+            gzval(i,2) =  1.0 ! cP
+          endif
+        enddo
+      else
+        zvalence(1) = -1.0 ! cN
+        zvalence(2) =  1.0 ! cP
+      endif
+
+
+      if (ifsol) then  ! DimLess?, Lan
+
+        K_beta     = 1.0
+        temperature= 1.0
+        tau_n      = 1.0
+        tau_p      = 1.0
+        call rone(d_permit,npts)
+        call rone(d_permea,npts)
+
+      else
+
+        scale_xc     = 1.E-9  ! L in Cylinder case
+
+        scale_x      = 1.E-10
+        scale_mu     = 1.957E-9  ! K+
+        K_beta       = 1.3806488e-23
+        e_charge     = 1.60217657e-19
+        epsilon_0    = 8.854e-12
+        n_avo        = 6.022141E23
+  
+        scale_concent = 100*n_avo
+
+        debye         = 13.8E-10
+
+        scale_potent  = (debye**2 * scale_concent*e_charge)
+     $                / (80.0*epsilon_0)
+
+        temperature   = scale_potent * e_charge / K_beta
+        scale_charge  = scale_x**3 * scale_concent
+        scale_time    = (scale_mu*scale_x**2) / scale_potent
+        scale_elect   = scale_potent / scale_x
+c        constant_0    = 1.0/(scale_x**3*scale_concent)
+c        const_cdenc   = r_c*r_c*pi*scale_xc !*scale_concent
+ 
+c        debye2_0       = (epsilon_0*K_beta*temperature) 
+c     $                / (scale_concent*e_charge**2)
+ 
+c       constant_0   = e_charge/temperature/K_beta
+c       r_coulomb=constant_0*e_charge/epsilon_0/4.0/pi
+c       tau_n = 1.0E-4/scale_time
+c       tau_p = 1.0E-4/scale_time
+c       tau_cE= 1.0E-6/scale_time
+
+        r_c = 0.5*scale_xc  ! radius of channel tube, phy dim, charge
+        const_cdenc   = r_c*r_c*pi*scale_xc !*scale_concent
+
+        mu_n0 = 7.7e-9 /scale_mu
+        mu_p0 = 5.1e-9 /scale_mu
+        mu_e0 = 3.86e-9/scale_mu
+
+        if (nid.eq.0) then
+          write(6,*) 'scale_x',scale_x
+          write(6,*) 'scale_mu',scale_mu
+          write(6,*) 'scale_time',scale_time
+          write(6,*) 'scale_concent',scale_concent
+          write(6,*) 'scale_potent',scale_potent
+          write(6,*) 'scale_elect',scale_elect
+          write(6,*) 'tau_n',tau_n
+          write(6,*) 'tau_p',tau_p
+          write(6,*) 'tau_e',tau_ce
+          write(6,*) 'e_charge',e_charge
+          write(6,*) 'k_beta',k_beta
+          write(6,*) 'temperature',temperature
+          write(6,*) 'constant_0',constant_0
+          write(6,*) 'r_coulomb',r_coulomb
+          write(6,*) 'mu_n0',mu_n0
+          write(6,*) 'mu_p0',mu_p0
+          write(6,*) 'const_cdenc',const_cdenc
+          write(6,*) 'debye',debye
+        endif
+
+        small_diff =  0.0
+        diff_1     =  2.032E-9/scale_mu
+        diff_2     =  1.957E-9/scale_mu
+c        diff_0     =  1E-16  ! dimless
+
+        small_perm =  2.18E-10/scale_x
+        big_perm   = 13.8E-10 /scale_x
+
+        do ie=1,nelt
+          if     (if_in_region(ie).eq.1) then !donner
+            do i = 1,nxyz
+              j = (ie-1)*nxyz+i
+              d_permit(j)= small_perm + (big_perm-small_perm)*qstep(j)
+              d_permea(j)=  1.0
+              mu_n(j,1)  = small_diff + (diff_1-small_diff)*qstep(j)               !mem=0
+              mu_n(j,2)  = small_diff + (diff_2-small_diff)*qstep(j)               !mem=0
+              charge(j)  = psrc(j) / scale_charge !0.0
+            enddo
+          elseif (if_in_region(ie).eq.2) then !accepter
+            do i= 1,nxyz
+              j= (ie-1)*nxyz+i
+              d_permit(j)= small_perm + (big_perm-small_perm)*qstep(j)
+              d_permea(j)=  1.0
+              mu_n(j,1)  = small_diff + (diff_1-small_diff)*qstep(j)               !mem=0
+              mu_n(j,2)  = small_diff + (diff_2-small_diff)*qstep(j)               !mem=0
+              charge(j)  = psrc(j) / scale_charge !-4.0/(0.2*const_cdenc) / scale_concent
+            enddo
+          elseif (if_in_region(ie).eq.3) then !accepter
+            do i= 1,nxyz
+              j= (ie-1)*nxyz+i
+              d_permit(j)= small_perm + (big_perm-small_perm)*qstep(j)
+              d_permea(j)=  1.0
+              mu_n(j,1)  = small_diff + (diff_1-small_diff)*qstep(j)               !mem=0
+              mu_n(j,2)  = small_diff + (diff_2-small_diff)*qstep(j)               !mem=0
+              charge(j)  = psrc(j) / scale_charge !0.0
+            enddo
+          elseif (if_in_region(ie).eq.4) then !accepter
+            do i= 1,nxyz
+              j= (ie-1)*nxyz+i
+              d_permit(j)= small_perm + (big_perm-small_perm)*qstep(j)
+              d_permea(j)=  1.0
+              mu_n(j,1)  = small_diff + (diff_1-small_diff)*qstep(j)               !mem=0
+              mu_n(j,2)  = small_diff + (diff_2-small_diff)*qstep(j)               !mem=0
+              charge(j)  = psrc(j) / scale_charge !-0.5/(1.0*const_cdenc) / scale_concent
+            enddo
+          elseif (if_in_region(ie).eq.5) then !accepter
+            do i= 1,nxyz
+              j= (ie-1)*nxyz+i
+              d_permit(j)= small_perm + (big_perm-small_perm)*qstep(j)
+              d_permea(j)=  1.0
+              mu_n(j,1)  = small_diff + (diff_1-small_diff)*qstep(j)               !mem=0
+              mu_n(j,2)  = small_diff + (diff_2-small_diff)*qstep(j)               !mem=0
+              charge(j)  = psrc(j) / scale_charge !-1.5/(1.2*const_cdenc) / scale_concent
+            enddo
+          elseif (if_in_region(ie).eq.6) then !accepter
+            do i= 1,nxyz
+              j= (ie-1)*nxyz+i
+              d_permit(j)= small_perm + (big_perm-small_perm)*qstep(j)
+              d_permea(j)=  1.0
+              mu_n(j,1)  = small_diff + (diff_1-small_diff)*qstep(j)               !mem=0
+              mu_n(j,2)  = small_diff + (diff_2-small_diff)*qstep(j)               !mem=0
+              charge(j)  = psrc(j) / scale_charge !0.0
+            enddo
+          elseif (if_in_region(ie).lt.0) then
+            do i= 1,nxyz
+              j= (ie-1)*nxyz+i
+              d_permit(j)= small_perm + (big_perm-small_perm)*qstep(j)
+              d_permea(j)=  1.0
+              mu_n(j,1)  = small_diff + (diff_1-small_diff)*qstep(j)               !mem=0
+              mu_n(j,2)  = small_diff + (diff_2-small_diff)*qstep(j)               !mem=0
+              charge(j)  = psrc(j) / scale_charge !0.0
+            enddo
+          else
+            if (nid.eq.0) write(6,*) if_in_region(ie),
+     $          'if_in_region not defined in usr'
+          endif
+        enddo
+
+      endif
+
+      do ic = 1,lcdim
+        call copy(diff_n(1,ic),mu_n(1,ic),npts)
+      enddo
+
+c      call usernewton
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat2
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer lt
+      parameter(lt=lx1*ly1*lz1*lelt)
+      common /myPQRfields/ distp(lt),psrc(lt),phip(lt),qstep(lt)
+     $                   , distpr1(lt),distpr2(lt),dlayers(lt)
+     $                   , pqrshape(lt)
+      real distp,psrc,phip,qstep
+     $   , distpr1,distpr2,dlayers,pqrshape   
+
+      common /GetStep/ stepf(lt),stepm(lt),step1(lt),step2(lt)
+      real stepf,stepm,step1,step2
+
+      integer nn,nn1,i,ie,j
+      real pdat(6000,5)
+      real ad1dat(500,5)
+
+      real rscale
+      real xmin,ymin,zmin,xmax,ymax,zmax
+      real xxmin,yymin,zzmin,xxmax,yymax,zzmax
+      real xxmid,yymid,zzmid
+      real rrmid,r_in,r_out
+      integer mx,my,mz
+
+
+      n = lx1*ly1*lz1*nelv
+
+      xmin = glmin(xm1,n)
+      xmax = glmax(xm1,n)
+      ymin = glmin(ym1,n)
+      ymax = glmax(ym1,n)
+      zmin = glmin(zm1,n)
+      zmax = glmax(zm1,n)
+
+      r_in =  5.0 
+      r_out= 55.0
+
+
+C     Rescale
+c      sx = 110.0/(xmax-xmin)
+c      sy = 110.0/(ymax-ymin)
+c      sz = 85.0/(zmax-zmin)
+c
+c      do i = 1,npts
+c         xm1(i,1,1,1) = sx*(xm1(i,1,1,1)-xmin)-55.0
+c         ym1(i,1,1,1) = sy*(ym1(i,1,1,1)-ymin)-55.0
+c         zm1(i,1,1,1) = sz*(zm1(i,1,1,1)-zmin)-45.0
+c      enddo
+
+      xmin = glmin(xm1,n)
+      xmax = glmax(xm1,n)
+      ymin = glmin(ym1,n)
+      ymax = glmax(ym1,n)
+      zmin = glmin(zm1,n)
+      zmax = glmax(zm1,n)
+
+      if (nid.eq.0) write(6,*) 'xmin/xmax',xmin,xmax
+      if (nid.eq.0) write(6,*) 'ymin/ymax',ymin,ymax
+      if (nid.eq.0) write(6,*) 'zmin/zmax',zmin,zmax
+
+
+C     Read PQR
+      open(unit=10,file='q.dat')
+
+      nn = 0
+      do i=1,6000
+      read(10,*,end=99) (pdat(i,j),j=1,5)
+      nn=nn+1
+      enddo
+   99 continue
+
+C     Read fillpro1
+      open(unit=11,file='fillpro1.dat')
+
+      nn1 = 0
+      do i=1,500
+      read(11,*,end=98) (ad1dat(i,j),j=1,5)
+      nn1=nn1+1
+      enddo
+   98 continue
+
+      if (nid.eq.0) write(*,*)'Lan, nn,nn1=',nn,nn1
+      call compute_pqr_only(pdat,nn,ad1dat,nn1)
+
+
+      mx = nx1/2
+      my = ny1/2
+      mz = nz1/2
+
+      do ie = 1,nelt
+
+        xxmax = vlmax(xm1(1,1,1,ie),nxyz)
+        xxmin = vlmin(xm1(1,1,1,ie),nxyz)
+        yymax = vlmax(ym1(1,1,1,ie),nxyz)
+        yymin = vlmin(ym1(1,1,1,ie),nxyz)
+        zzmax = vlmax(zm1(1,1,1,ie),nxyz)
+        zzmin = vlmin(zm1(1,1,1,ie),nxyz)
+
+        xxmid = xm1(mx,my,mz,ie)
+        yymid = ym1(mx,my,mz,ie)
+        zzmid = zm1(mx,my,mz,ie)
+
+        rrmid = sqrt(xxmid**2 + yymid**2)
+
+        if (zzmid.lt.-20.0) then
+          if_in_region(ie)   =  1
+        elseif (zzmid.lt.-18.0) then
+          if (rrmid.le.r_in) then
+            if_in_region(ie) =  2
+          else
+            if_in_region(ie) = -2
+          endif
+        elseif (zzmid.lt.-7.0) then
+          if (rrmid.le.r_in) then
+            if_in_region(ie) =  3
+          else
+            if_in_region(ie) = -3
+          endif
+        elseif (zzmid.lt.3.0) then
+          if (rrmid.le.r_in) then
+            if_in_region(ie) =  4
+          else
+            if_in_region(ie) = -4
+          endif
+        elseif (zzmid.lt.15.0) then
+          if (rrmid.le.r_in) then
+            if_in_region(ie) =  5
+          else
+            if_in_region(ie) = -5
+          endif
+        elseif (zzmid.lt.100.0) then
+          if_in_region(ie) =  6
+        endif
+
+      enddo
+
+c      call compute_dm
+
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userchk
+c-----------------------------------------------------------------------
+      include 'SIZE'
+      include 'TOTAL'
+      include 'DRIFT'
+      include 'POISSON'
+      include 'RTIMER'
+
+      integer i
+      real l2(6),linf(6)
+      real l2tol(6),linftol(6)
+      real dummy(lx1*ly1*lz1*lelt)
+
+      l2(1) = 0.0
+      l2(2) = 0.0
+      l2(3) = 0.0
+      l2(4) = 0.0
+      l2(5) = 0.0
+      l2(6) = 0.0
+
+      linf(1) = 0.0
+      linf(2) = 0.0
+      linf(3) = 0.0
+      linf(4) = 0.0
+      linf(5) = 0.0
+      linf(6) = 0.0
+
+      l2tol(1) = 2e-6
+      l2tol(2) = 3e-6
+      l2tol(3) = 0.0
+      l2tol(4) = 8e-8
+      l2tol(5) = 0.0
+      l2tol(6) = 0.0
+
+      linftol(1) = 5e-6
+      linftol(2) = 7e-6
+      linftol(3) = 0.0
+      linftol(4) = 2e-7
+      linftol(5) = 0.0
+      linftol(6) = 0.0
+
+      if (istep.le.10.or.mod(istep,iocomm).eq.0) then
+         call usersol(time,spotent,scn,dummy,dummy,dummy,dummy)
+
+         call cem_error(cN(1,1),scN(1,1),errcN(1,1),npts,l2(1),linf(1))
+         call cem_error(cN(1,2),scN(1,2),errcN(1,2),npts,l2(2),linf(2))
+         call cem_error(potent,spotent,epotent,npts,l2(4),linf(4))
+
+         call userprint(istep,time,dt,l2,linf,cpu_t,cpu_p_t)
+
+        if (istep.eq.nsteps) then
+           do i = 1,6
+              if (l2(i).gt.l2tol(i)) call exitt(1)
+              if (linf(i).gt.linftol(i)) call exitt(1)
+           enddo
+        endif
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userprint(istep,tt,dt,l2,linf,t1,t2)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+
+      integer istep
+      real tt,dt,t1,t2
+      real l2(6),linf(6)
+
+      integer k
+
+      if (nid.eq.0) then
+         write(6,101) istep,nelt,nx1-1,npts,tt,dt,(l2(k),k=1,6),t1,t2
+         write(6,102) istep,nelt,nx1-1,npts,tt,dt,(linf(k),k=1,6),t1,t2
+      endif
+
+ 101  format(/,i10,i6,i4,i9,1p9e10.3,e9.2,' CPU: L2')
+ 102  format(  i10,i6,i4,i9,1p9e10.3,e9.2,' CPU: Linf')
+
+      return
+      end
+
+
+c-----------------------------------------------------------------------
+      subroutine compute_dm
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer lt
+      parameter(lt=lx1*ly1*lz1*lelt)
+      common /GetStep/ stepf(lt),stepm(lt),step1(lt),step2(lt)
+      real stepf,stepm,step1,step2
+
+      integer i
+      real rmx
+      real xx,yy,zz,xy_r
+      real distr(lt),distr2(lt),distb(lt)
+      real rad,rad2,rad3
+
+      rmx = 0.5
+
+      npts = nx1*ny1*nz1*nelt
+
+      do i=1,npts
+        xx = xm1(i,1,1,1)
+        yy = ym1(i,1,1,1)
+        zz = zm1(i,1,1,1)
+        xy_r = sqrt(xx**2 + yy**2)
+
+
+        if (zz.lt.-20.0) then
+          if (xy_r.gt.5.0) then
+            rad = 1.0                                 ! >0
+            rad2=  -20.0-zz                           ! >0
+            rad3=  1.0*sqrt((-20.0-zz)**2 + (xy_r-5.0)**2) ! >0
+          else
+            rad =  1.0      ! >0
+            rad2=  1.0*sqrt((-20.0-zz)**2 + (xy_r-5.0)**2) ! >0
+            rad3= -20.0-zz                                 ! >0
+          endif
+        elseif (zz.lt.15.0) then
+          if (xy_r.gt.5.0) then     ! membrane => minus
+            rad = 0.0
+            rad2= 5.0-xy_r                                 ! <0
+            rad3 = -1000.0                                 ! =0
+          else
+            rad = 1.0                                 ! >0
+            rad2= 5.0-xy_r                                 ! >0
+            rad3= max(-20.0-zz,zz-15.0)                   ! <0
+          endif
+        else
+          if (xy_r.gt.5.0) then
+            rad = 1.0                                ! >0
+            rad2= zz-15.0                                  ! >0
+            rad3=  1.0*sqrt((zz-15.0)**2 + (xy_r-5.0)**2)  ! >0
+          else
+            rad = 1.0
+            rad2= 1.0*sqrt((zz-15.0)**2 + (xy_r-5.0)**2)   ! >0
+            rad3= zz-15.0                                  ! >0
+          endif
+        endif
+        
+        distr(i) = rad     ! (b,f,m)=(1,1,0)
+        distr2(i)= rad2    ! (b,f,m)=(+,+,-)
+        distb(i) = rad3    ! (b,f,m)=(+,-,x)
+      enddo
+
+      do i=1,npts
+        stepm(i) = distr(i)         ! (b,f,m) = 1/0(1,1,0)
+        stepf(i) = (1.0 + tanh(distr2(i)/rmx-0.7))/2   ! (b,f,m) = sm(1,1,0)
+
+        step1(i) = (1.0 + tanh(distb(i)/rmx-0.7))/2    ! (b,f,m) = sm(1,0,x)
+        step2(i) = stepf(i)   ! (b,f,m) = sm(1,1,0)
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine compute_pqr_only(pdat,npart,ad1dat,n1part)
+c-----------------------------------------------------------------------
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer lt
+      parameter(l_pdat=6000,lt=lx1*ly1*lz1*lelt)
+      parameter(l_ad1dat=500)
+      real pdat(l_pdat,5)
+      real ad1dat(l_ad1dat,5)
+
+      common /myPQRfields/ distp(lt),psrc(lt),phip(lt),qstep(lt)
+     $                   , distpr1(lt),distpr2(lt),dlayers(lt)
+     $                   , pqrshape(lt)
+      real distp,psrc,phip,qstep
+     $   , distpr1,distpr2,dlayers,pqrshape   
+
+      common /mygeom/ xmin,xmax,ymin,ymax,zmin,zmax
+      real xmin,xmax,ymin,ymax,zmin,zmax
+
+      real v_ball
+      real r1,r2,r3,r3t,rmx,dynr1
+      real pxx,pyy,pzz,pxyr
+      real dpt_r1,dpt_r2
+      real xxi,yyi,zzi,xxj,yyj,zzj
+      real dxi,dyi,dzi,rad
+
+      integer r2lay(lt),r1lay(lt)
+      integer n_r2lay, n_r1lay
+      integer iind,jind
+
+      n=nx1*ny1*nz1*nelt
+
+      call domain_size(xmin,xmax,ymin,ymax,zmin,zmax)
+
+      dmin=min(xmin,ymin)
+      dmin=min(dmin,zmin)
+      dmax=max(xmax,ymax)
+      dmax=max(dmax,zmax)
+
+      dmax = dmax-dmin
+      tiny = 1.e-15   ! to avoid zero comes out at denominator
+      rmin = vlmin(pdat(1,4),npart) ! Min radius
+
+
+
+C     Set Multi-Layer param, Lan
+C   / -------------------------------\
+C  r2|        reg r2-r1             | r3
+C    |   /------------------| r3t   |
+C    | r1 |   reg r1        ---------/
+C   \====\===========================
+C          Protein/Membrane
+C
+      r1 = 0.5
+      r3t= 0.1
+      r2 = 1.4
+
+      r3 = r2 - r1 + r3t
+      r1max = 0.2   ! 2*r1 < diameter of filter = 5.0
+
+      do i=1,npts        ! March through each point in computational domain
+        distp(i)  =dmax    ! Init distance func to be domain size
+        distpr1(i)=dmax    ! Init distance func to be domain size
+        distpr2(i)=dmax    ! Init distance func to be domain size
+
+        phip (i)=0    ! phi to be zero
+        xx=xm1(i,1,1,1)
+        yy=ym1(i,1,1,1)
+        zz=zm1(i,1,1,1)
+
+        xy_r=xx*xx+yy*yy
+        xy_r=sqrt(xy_r)
+
+        do j=1,npart
+
+           pxx=pdat(j,1)
+           pyy=pdat(j,2)
+           pzz=pdat(j,3)
+           pxyr=sqrt(pxx**2+pyy**2)
+
+           dxi= xx-pxx
+           dyi= yy-pyy
+           dzi= zz-pzz
+           rad= dxi*dxi+dyi*dyi+dzi*dzi 
+           rad= sqrt(rad)   ! d(grid_i,atom_j)
+           rpt= pdat(j,4)   ! atom_radius
+
+           ! protect filter
+           if (pzz.gt.10.0.AND.pzz.le.13.0) then ! buff zone
+             if (pxyr.le.3.0) then
+               dynr1 = r1max + (r1-r1max)*((pzz-10.0)/3.0)
+             else
+               dynr1 = r1
+             endif
+           elseif (pzz.ge.-5.0) then             ! filter
+             if (pxyr.le.3.0) then
+               dynr1 = r1max
+             else
+               dynr1 = r1
+             endif
+           elseif (pzz.ge.-8.0) then             ! buff zone
+             if (pxyr.le.3.0) then
+               dynr1 = r1max + (r1max-r1)*((pzz+5.0)/3.0)
+             else
+               dynr1 = r1
+             endif
+           else
+             dynr1 = r1
+           endif
+
+           dpt   = rad-rpt     ! Signed distance function
+           dpt_r1= rad-rpt-dynr1     ! ext r1
+           dpt_r2= rad-rpt-r2     ! ext r2
+
+           distp(i)  =min(distp(i),dpt)    ! Union of distances over particles
+           distpr1(i)=min(distpr1(i),dpt_r1)
+           distpr2(i)=min(distpr2(i),dpt_r2)
+
+           pcharge= pdat(j,5)   ! Particle charge
+           phip(i)= phip(i) + pcharge/(rad+tiny) ! ideal potential of the point charge
+
+           ! setting up the normal distribution
+c           sigma  = 0.2*rmin
+c           sigma2 = sigma*sigma
+c           scale  = 1./sqrt(2*pi*sigma2)
+c           scale  = scale**3
+c           arg    = -rad*rad/(2*sigma2)
+c           psrc (i) = psrc(i) + pcharge*scale*exp(arg) ! Approx Dirac delta
+
+           ! setting up the uniform distribution
+           scale   = (1.0 + tanh(-1.0*dpt/0.01))/2 ! smooth step
+c           scale   = (1.0 + sign(1.0,-1.0*dpt))/2 ! step func
+           v_ball  = 4*pi/3*rpt**3
+           psrc(i) = psrc(i) + pcharge*scale/v_ball ! Approx Dirac delta
+        enddo
+
+C       Fill pores
+        do j=1,n1part    ! part1 /4
+           pxx=ad1dat(j,2)
+           pyy=ad1dat(j,3)
+           pzz=ad1dat(j,4)
+           pxyr=sqrt(pxx**2+pyy**2)
+
+           dxi= xx-pxx
+           dyi= yy-pyy
+           dzi= zz-pzz
+           rad= dxi*dxi+dyi*dyi+dzi*dzi 
+           rad= sqrt(rad)   ! d(grid_i,atom_j)
+           rpt= ad1dat(j,5)   ! atom_radius
+
+           ! protect filter
+           if (pzz.gt.10.0.AND.pzz.le.13.0) then ! buff zone
+             if (pxyr.le.3.0) then
+               dynr1 = r1max + (r1-r1max)*((pzz-10.0)/3.0)
+             else
+               dynr1 = r1
+             endif
+           elseif (pzz.ge.-5.0) then             ! filter
+             if (pxyr.le.3.0) then
+               dynr1 = r1max
+             else
+               dynr1 = r1
+             endif
+           elseif (pzz.ge.-8.0) then             ! buff zone
+             if (pxyr.le.3.0) then
+               dynr1 = r1max + (r1max-r1)*((pzz+5.0)/3.0)
+             else
+               dynr1 = r1
+             endif
+           else
+             dynr1 = r1
+           endif
+
+           dpt   = rad-rpt     ! Signed distance function
+           dpt_r1= rad-rpt-dynr1  ! ext r1
+           dpt_r2= rad-rpt-r2     ! ext r2
+
+           distp(i)  =min(distp(i),dpt)    ! Union of distances over particles
+           distpr1(i)=min(distpr1(i),dpt_r1)
+           distpr2(i)=min(distpr2(i),dpt_r2)
+        enddo
+        do j=1,n1part    ! part2 /4
+           pxx=-1.0*ad1dat(j,3)
+           pyy=     ad1dat(j,2)
+           pzz=     ad1dat(j,4)
+           pxyr=sqrt(pxx**2+pyy**2)
+
+           dxi= xx-pxx
+           dyi= yy-pyy
+           dzi= zz-pzz
+           rad= dxi*dxi+dyi*dyi+dzi*dzi 
+           rad= sqrt(rad)   ! d(grid_i,atom_j)
+           rpt= ad1dat(j,5)   ! atom_radius
+
+           ! protect filter
+           if (pzz.gt.10.0.AND.pzz.le.13.0) then ! buff zone
+             if (pxyr.le.3.0) then
+               dynr1 = r1max + (r1-r1max)*((pzz-10.0)/3.0)
+             else
+               dynr1 = r1
+             endif
+           elseif (pzz.ge.-5.0) then             ! filter
+             if (pxyr.le.3.0) then
+               dynr1 = r1max
+             else
+               dynr1 = r1
+             endif
+           elseif (pzz.ge.-8.0) then             ! buff zone
+             if (pxyr.le.3.0) then
+               dynr1 = r1max + (r1max-r1)*((pzz+5.0)/3.0)
+             else
+               dynr1 = r1
+             endif
+           else
+             dynr1 = r1
+           endif
+
+           dpt   = rad-rpt     ! Signed distance function
+           dpt_r1= rad-rpt-dynr1  ! ext r1
+           dpt_r2= rad-rpt-r2     ! ext r2
+
+           distp(i)  =min(distp(i),dpt)    ! Union of distances over particles
+           distpr1(i)=min(distpr1(i),dpt_r1)
+           distpr2(i)=min(distpr2(i),dpt_r2)
+        enddo
+        do j=1,n1part    ! part3 /4
+           pxx=-1.0*ad1dat(j,2)
+           pyy=-1.0*ad1dat(j,3)
+           pzz=     ad1dat(j,4)
+           pxyr=sqrt(pxx**2+pyy**2)
+
+           dxi= xx-pxx
+           dyi= yy-pyy
+           dzi= zz-pzz
+           rad= dxi*dxi+dyi*dyi+dzi*dzi 
+           rad= sqrt(rad)   ! d(grid_i,atom_j)
+           rpt= ad1dat(j,5)   ! atom_radius
+
+           ! protect filter
+           if (pzz.gt.10.0.AND.pzz.le.13.0) then ! buff zone
+             if (pxyr.le.3.0) then
+               dynr1 = r1max + (r1-r1max)*((pzz-10.0)/3.0)
+             else
+               dynr1 = r1
+             endif
+           elseif (pzz.ge.-5.0) then             ! filter
+             if (pxyr.le.3.0) then
+               dynr1 = r1max
+             else
+               dynr1 = r1
+             endif
+           elseif (pzz.ge.-8.0) then             ! buff zone
+             if (pxyr.le.3.0) then
+               dynr1 = r1max + (r1max-r1)*((pzz+5.0)/3.0)
+             else
+               dynr1 = r1
+             endif
+           else
+             dynr1 = r1
+           endif
+
+           dpt   = rad-rpt     ! Signed distance function
+           dpt_r1= rad-rpt-dynr1     ! ext r1
+           dpt_r2= rad-rpt-r2     ! ext r2
+
+           distp(i)  =min(distp(i),dpt)    ! Union of distances over particles
+           distpr1(i)=min(distpr1(i),dpt_r1)
+           distpr2(i)=min(distpr2(i),dpt_r2)
+        enddo
+        do j=1,n1part    ! part4 /4
+           pxx=     ad1dat(j,3)
+           pyy=-1.0*ad1dat(j,2)
+           pzz=     ad1dat(j,4)
+           pxyr=sqrt(pxx**2+pyy**2)
+
+           dxi= xx-pxx
+           dyi= yy-pyy
+           dzi= zz-pzz
+           rad= dxi*dxi+dyi*dyi+dzi*dzi 
+           rad= sqrt(rad)   ! d(grid_i,atom_j)
+           rpt= ad1dat(j,5)   ! atom_radius
+
+           ! protect filter
+           if (pzz.gt.10.0.AND.pzz.le.13.0) then ! buff zone
+             if (pxyr.le.3.0) then
+               dynr1 = r1max + (r1-r1max)*((pzz-10.0)/3.0)
+             else
+               dynr1 = r1
+             endif
+           elseif (pzz.ge.-5.0) then             ! filter
+             if (pxyr.le.3.0) then
+               dynr1 = r1max
+             else
+               dynr1 = r1
+             endif
+           elseif (pzz.ge.-8.0) then             ! buff zone
+             if (pxyr.le.3.0) then
+               dynr1 = r1max + (r1max-r1)*((pzz+5.0)/3.0)
+             else
+               dynr1 = r1
+             endif
+           else
+             dynr1 = r1
+           endif
+
+           dpt   = rad-rpt     ! Signed distance function
+           dpt_r1= rad-rpt-dynr1     ! ext r1
+           dpt_r2= rad-rpt-r2     ! ext r2
+
+           distp(i)  =min(distp(i),dpt)    ! Union of distances over particles
+           distpr1(i)=min(distpr1(i),dpt_r1)
+           distpr2(i)=min(distpr2(i),dpt_r2)
+        enddo
+
+
+C       Membrane ! Todo: Lan, modified later
+        rmx = 0.5  ! assume membrane as max radius ball
+        if (zz.gt.10.0) then            ! zone Outer cell
+          if (xy_r.gt.11.6) then        !   zone OR
+            rad = abs(zz-10.0)
+          else                          !   zone Or
+            rad = sqrt((xy_r-11.6)**2 + (zz-10.0)**2)
+          endif
+        elseif (zz.gt.-18.7) then       ! zone Membrane
+          if (xy_r.gt.11.6) then        !   zone MR
+            tt1 = abs(zz+18.7)
+            tt2 = abs(zz-10.0)
+            tt3 = abs(xy_r- 11.6)
+            rad = min(tt1,tt2)
+            rad = min(rad,tt3)
+            rad = -1.0*rad
+          else                          !   zone Mr
+            rad = abs(xy_r-11.6)
+          endif
+        else                            ! zone Inner cell
+          if (xy_r.gt.11.6) then        !   zone IR
+            rad = abs(zz+18.7)
+          else                          !   zone Ir
+            rad = sqrt((xy_r-11.6)**2 + (zz+18.7)**2)
+          endif
+        endif
+        dpt   = rad - rmx
+        dpt_r1= rad - rmx-r1
+        dpt_r2= rad - rmx-r2
+
+        ! add membrane into proteins, comment out tmp, Todo: Lan
+        distp(i)  = min(distp(i),dpt)  
+        distpr1(i)= min(distpr1(i),dpt_r1)
+        distpr2(i)= min(distpr2(i),dpt_r2)
+      enddo
+
+      do i=1,npts
+         qstep(i)= (1.0 + tanh(distpr1(i)*16.0))/2 ! sigmoid func. connect jump
+      enddo
+
+C     Multi-Layer algo.
+C     - determine protein, r1, r2 layers, and counting num
+C                 dlayer   pqrshape
+C       mem+pro:    -3.0      -10.0
+C       r1 layer:   -2.0       -5.0
+C       r2-r1       -1.0        0.0
+C       solvent:     1.0        1.0
+
+      n_r1lay=0
+      n_r2lay=0
+      do i=1,npts
+        if (distp(i).lt.0.0) then
+          dlayers(i) = -3.0   ! protein + membrane
+          pqrshape(i)= -10.0
+
+        elseif (distpr1(i).lt.0.0) then
+          dlayers(i) = -2.0   ! r1 layer
+          pqrshape(i)= -5.0
+
+          n_r1lay = n_r1lay+1   ! counting and record grid index
+          r1lay(n_r1lay) = i
+
+        elseif (distpr2(i).lt.0.0) then
+          dlayers(i) = -1.0   ! r2-r1 layer
+          pqrshape(i)=  0.0
+
+          n_r2lay = n_r2lay+1   ! counting and record grid index
+          r2lay(n_r2lay) = i
+
+        else
+          dlayers(i) =  1.0   ! solvent region
+          pqrshape(i)=  1.0
+        endif
+      enddo
+
+CC     - update protein region, fail, data not global
+C      do i=1,n_r1lay
+C        iind = r1lay(i)        ! pick iind in r1lay
+C        xxi=xm1(iind,1,1,1)
+C        yyi=ym1(iind,1,1,1)
+C        zzi=zm1(iind,1,1,1)
+C
+C        do j=1,n_r2lay         ! pick jind in r2lay
+C          jind = r2lay(j)
+C          xxj=xm1(jind,1,1,1)
+C          yyj=ym1(jind,1,1,1)
+C          zzj=zm1(jind,1,1,1)
+C
+C          dxi=xxi-xxj          ! distance of these two points
+C          dyi=yyi-yyj
+C          dzi=zzi-zzj
+C          rad=dxi*dxi+dyi*dyi+dzi*dzi
+C          rad=sqrt(rad)
+C
+C          if (rad.gt.abs(r3t)) then  ! subtract: r1lay\r2lay
+C            pqrshape(iind) = 0.0
+C            goto 111
+C          endif
+C        enddo
+C  111   continue
+C
+C      enddo
+
+
+
+      return
+      end
+c---------------------------------------------------------------------
+      subroutine domain_size(xmin,xmax,ymin,ymax,zmin,zmax)
+      include 'SIZE'
+      include 'TOTAL'
+
+      n = nx1*ny1*nz1*nelt
+
+      xmin = glmin(xm1,n)
+      xmax = glmax(xm1,n)
+      ymin = glmin(ym1,n)
+      ymax = glmax(ym1,n)
+
+      if (ldim.eq.3) then
+         zmin = glmin(zm1,n)
+         zmax = glmax(zm1,n)
+      else
+         zmin = 0.
+         zmax = 0.
+      endif
+
+      return
+      end
+cc-----------------------------------------------------------------------
+c      subroutine usernewton
+cc-----------------------------------------------------------------------
+c      implicit none
+c      include 'SIZE'
+c      include 'TOTAL'
+c      include 'DRIFT'
+c      include 'NEWTON'
+c
+c      real paramNT(20)
+c      integer nn,i
+c
+c      ifparamNT = .false. ! false = default, true = set param at here
+c
+cc     Set Parameters manually
+c      ifsep    = 1        ! 0=couple, 1=separate, Lan
+c
+c      alpha    = 1.0      ! relaxation parameter \alpha \in (0,1]
+c      maxit    = 20       ! iteration for Newton method
+c      jaceps   = 1e-5     ! perturbation parameter for Jacobi-free
+c      tolGMRES = 1e-10    ! tolerance for GMRES
+c      tolNT    = 1e-5     ! tolerance for Newton method
+c
+c      dtNT     = param(1) ! pseudo-transient time step
+c                          !   it can grow as istep increase
+c      f_pre    = 0.0      ! zero to set dtNT (or SER)
+c      max_dtNT = 1E5      ! Max. of dtNT, avoid NaN
+c      min_tol  = 1E-12    ! Min. of tol,  avoid NaN
+c
+c
+cc     hack for restart
+c      if (ifrestart) then
+c        ifparamNT = .true.
+c        call read_paramNT
+c      endif
+c
+c      return
+c      end
+cc-----------------------------------------------------------------------

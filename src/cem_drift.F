@@ -436,7 +436,7 @@ c---------------------------------------------------------------------
 
 C     Penalty, add pen*(C^{n+1} to lhs)
       call rzero (pen,npts)
-      do i = 1,npts
+      do i = 1,npts ! penalty, Lan
         if (qstep(i).lt.0.9) then
           pen(i) = (lxi*(lxi+1)/2)**param(3)
         endif
@@ -503,7 +503,7 @@ c-----------------------------------------------------------------------
       include 'DRIFT'
       include 'POISSON'
       include 'BCS'
-      real wn(lpts), wp(lpts)
+      real wn(lpts), wp(lpts), tmp(lpts)
       real w_h1(lpts),w_h2(lpts)
       integer ic
 
@@ -519,7 +519,12 @@ c...  compute the nonlinear terms: cN*(grad(phi),cP*(grad(phi)
 c...  and add it to the right-hand-side
         call col3(w_h1,cn(1,ic),mu_n(1,ic),npts) ! wk_h1n= mu_n * cN
         call axhelm3(wn,potent,w_h1,w_h2,1,1)
+      if (param(9).eq.5) then  ! tmp, by Lan
+        call cmult2 (tmp,gzval(1,ic),-1.0*dt,npts)
+        call addcol3(rescN(1,ic),wn,tmp,npts)
+      else
         call add2s2 (rescN(1,ic),wn,-1.0*zvalence(ic)*dt,npts)
+      endif
 c      enddo
 
       return
@@ -1770,8 +1775,13 @@ c-----------------------------------------------------------------------
             k = cemface(j)
             tmp = gradp(k,1)*unxm(j)+gradp(k,2)*unym(j)
      $          + gradp(k,3)*unzm(j)
-            wa(k) = wa(k) 
-     $            - tmp*zvalence(ifld_c)*dt*wc(k)*wb(k)*aream(j)
+            if (param(9).eq.5) then ! tmp, by Lan
+              wa(k) = wa(k) 
+     $              - tmp*gzval(k,ifld_c)*dt*wc(k)*wb(k)*aream(j)
+            else
+              wa(k) = wa(k) 
+     $              - tmp*zvalence(ifld_c)*dt*wc(k)*wb(k)*aream(j)
+            endif
           enddo
         endif
 
@@ -1781,8 +1791,13 @@ c-----------------------------------------------------------------------
             k = cemface(j)
             tmp = gradp(k,1)*unxm(j)+gradp(k,2)*unym(j)
      $          + gradp(k,3)*unzm(j)
-            wa(k) = wa(k) 
-     $            - tmp*zvalence(ifld_c)*dt*wc(k)*wb(k)*aream(j)
+            if (param(9).eq.5) then ! tmp, by Lan
+              wa(k) = wa(k) 
+     $              - tmp*gzval(k,ifld_c)*dt*wc(k)*wb(k)*aream(j)
+            else
+              wa(k) = wa(k) 
+     $              - tmp*zvalence(ifld_c)*dt*wc(k)*wb(k)*aream(j)
+            endif
           enddo
         endif
 
