@@ -438,11 +438,11 @@ C     Penalty, add pen*(C^{n+1} to lhs)
       call rzero (pen,npts)
       do i = 1,npts
         if (qstep(i).lt.0.9) then
-          pen(i) = (lxi*(lxi+1)/2)**2
+          pen(i) = (lxi*(lxi+1)/2)**param(3)
         endif
       enddo
       do ic = 1,lcdim
-        call add2(h2c(i,ic),pen,npts)
+        call add2(h2c(1,ic),pen,npts)
       enddo
 
       return
