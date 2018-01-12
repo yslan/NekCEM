@@ -14,6 +14,7 @@ c     sane.
       ifse = .false.            ! spectral element method
       ifexct = .false.          ! drift-diffusion solver
       ifsteric = .false.        ! drift-diffusion w/ steric term
+      ifphasef = .false.        ! drift-diffusion w/ phase field function
       iffilter = .false.        ! filter
       ific = .false.            ! initial condition
       ifrestart = .false.       ! restart output file

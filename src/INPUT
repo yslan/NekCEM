@@ -16,13 +16,13 @@ c     array
 c
 c=======================================================================
       common /eflg/ ifcentral,ifupwind,ifsrc,ifpml,ifpp,ifeig,ifpec
-     $     ,ifdtn,ifneu,ifpmc,iftm,ifte,ifexct,ifsteric
+     $     ,ifdtn,ifneu,ifpmc,iftm,ifte,ifexct,ifsteric,ifphasef
      $     ,ifdealias,iffilter,ifinhom,ifrob,ifexp
      $     ,ifrk,ifbdf,ifbdf1,ifbdf1r,ifbdf2,ifrk45
      $     ,ifrk22,ifpoisson,ific,ifrestart,ifsol,ifdouble,ifcg,ifgmres
      $     ,ifprecon,ifgfdmdd,ifsemg,iffdm
       logical ifcentral,ifupwind,ifsrc,ifpml,ifpp,ifeig,ifpec,ifdtn
-     $     ,ifneu,ifpmc,iftm,ifte,ifexct,ifsteric
+     $     ,ifneu,ifpmc,iftm,ifte,ifexct,ifsteric,ifphasef
      $     ,ifdealias,iffilter,ifinhom,ifrob,ifexp
      $     ,ifrk,ifbdf,ifbdf1,ifbdf1r,ifbdf2,ifrk45,ifrk22
      $     ,ifpoisson,ific,ifrestart,ifsol,ifdouble,ifcg,ifgmres

@@ -71,6 +71,10 @@ c...  these to be deleted all when IFHEX/IFTET are done
       call rzero (aream,nxzfl)
       call rzero (approx_o,npts21)
 
+      call rzero (phasef,npts)
+      call rzero (gradph,lpts13)
+      call rzero (ugphase,lpts13)
+
       do i=1,npts
          xmn (i)= xm1 (i,1,1,1)
          ymn (i)= ym1 (i,1,1,1)
@@ -430,17 +434,17 @@ c---------------------------------------------------------------------
       npts= lx1*ly1*lz1*nelt 
                              
       do ic = 1,lcdim
-        call cmult2 (h1c(1,ic),diff_n(1,ic),dt,npts) ! h1n= h1n * (diff_n*dt)
+        call cmult2 (h1c(1,ic),mu_n(1,ic),dt,npts) ! h1n= h1n * (mu_n*dt)
         call rone (h2c(1,ic),npts)             ! h2n= 1.0
       enddo
 
 C     Penalty, add pen*(C^{n+1} to lhs)
       call rzero (pen,npts)
-      do i = 1,npts
-        if (qstep(i).lt.0.9) then
-          pen(i) = (lxi*(lxi+1)/2)**param(3)
-        endif
-      enddo
+c      do i = 1,npts
+c        if (qstep(i).lt.0.9) then
+c          pen(i) = (lxi*(lxi+1)/2)**param(3)
+c        endif
+c      enddo
       do ic = 1,lcdim
         call add2(h2c(1,ic),pen,npts)
       enddo
@@ -466,6 +470,8 @@ c---------------------------------------------------------------------
       real wb (lx1*ly1*lz1*lelt)
 
       call bcneusc0 (rescn(1,ic),mu_n(1,ic),cn(1,ic),npts,ic+1,1)
+      if (ifphasef)
+     $   call addphase (rescn(1,ic),diff_n(1,ic),cn(1,ic),npts,ic+1,1)
 
 c...  solve cn
       
@@ -1788,6 +1794,28 @@ c-----------------------------------------------------------------------
 
       endif
       
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine addphase (wa,wb,wc,n,ifld,itype)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'DRIFT'
+      include 'POISSON'
+      integer n,ifld,ifld_c,itype
+      real wa(lpts),wb(lpts),wc(lpts)
+      real tmp
+      integer i,j
+
+      ifld_c = ifld - 1
+      do i = 1,n
+        tmp = gradp(i,1)*ugphase(i,1)+gradp(i,2)*ugphase(i,2)
+     $      + gradp(i,3)*ugphase(i,3)
+        wa(i) = wa(i) + tmp*zvalence(ifld_c)*dt*wb(i)*wc(i)*bmn(i)
+      enddo
+
       return
       end
 c-----------------------------------------------------------------------
