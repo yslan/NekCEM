@@ -1,0 +1,61 @@
+      common /CubeSphereGrid/
+     $     EqAngAlpha(lx1,ly1,lz1,lelt), ! x coordinates of the mesh
+     $     EqAngBeta (lx1,ly1,lz1,lelt),  ! y coordinates of the mesh
+     $     CubeSphX  (lx1,ly1,lz1,lelt),
+     $     CubeSphY  (lx1,ly1,lz1,lelt),
+     $     CubeSphZ  (lx1,ly1,lz1,lelt),
+     $     BigR, CubeLength, CS_xtmp, CS_ytmp, CS_rtmp,
+     $     long(lx1,ly1,lz1,lelt),
+     $     lati(lx1,ly1,lz1,lelt),
+     $     radi(lx1,ly1,lz1,lelt),
+     $     CubeSphXtmp, CubeSphYtmp, CubeSphZtmp,
+     $     sn_long(lx1,ly1,lz1,lelt),
+     $     cs_long(lx1,ly1,lz1,lelt),
+     $     sn_lati(lx1,ly1,lz1,lelt),
+     $     cs_lati(lx1,ly1,lz1,lelt),
+     $     CS_u_0, alpha_0, cs_alpha0, sn_alpha0,
+     $     V_long(lx1,ly1,lz1,lelt),
+     $     V_lati(lx1,ly1,lz1,lelt),
+     $     Vabs  (lx1,ly1,lz1,lelt),
+     $     CS_V_x(lx1,ly1,lz1,lelt),
+     $     CS_V_y(lx1,ly1,lz1,lelt),
+     $     CS_V_z(lx1,ly1,lz1,lelt),
+     $     V_long_tmp, V_lati_tmp,
+     $     arg1, arg2,
+     $     CS_A_11(lx1,ly1,lz1,lelt),
+     $     CS_A_12(lx1,ly1,lz1,lelt),
+     $     CS_A_21(lx1,ly1,lz1,lelt),
+     $     CS_A_22(lx1,ly1,lz1,lelt),
+     $     CS_ainv11(lx1,ly1,lz1,lelt),
+     $     CS_ainv12(lx1,ly1,lz1,lelt),
+     $     CS_ainv21(lx1,ly1,lz1,lelt),
+     $     CS_ainv22(lx1,ly1,lz1,lelt),
+     $     CS_Atmp,
+     $     CS_Jac(lx1,ly1,lz1,lelt),
+     $     CS_u1(lx1,ly1,lz1,lelt),
+     $     CS_u2(lx1,ly1,lz1,lelt),
+     $     CS_F1(lx1,ly1,lz1,lelt),
+     $     CS_F2(lx1,ly1,lz1,lelt),
+     $     dF1_dx1(lx1,ly1,lz1,lelt),
+     $     dF2_dx2(lx1,ly1,lz1,lelt),
+     $     Diff_xi1(lx1,ly1,lz1,lelt),
+     $     Diff_xi2(lx1,ly1,lz1,lelt),
+     $     CS_Flux(lx1,ly1,lz1,lelt),
+     $     dx1v, dx2v
+
+      real EqAngAlpha,EqAngBeta
+      real CubeSphX, CubeSphY, CubeSphZ
+      real BigR, CubeLength
+      real CS_xtmp, CS_ytmp, CS_rtmp
+      real long, lati, radi
+      real CubeSphXtmp, CubeSphYtmp, CubeSphZtmp
+      real sn_long, cs_long, sn_lati, cs_lati
+      real CS_u_0, alpha_0, cs_alpha0, sn_alpha0
+      real V_long, V_lati, Vabs, CS_V_x, CS_V_y, CS_V_z
+      real V_long_tmp, V_lati_tmp
+      real arg1, arg2
+      real CS_A_11, CS_A_12, CS_A_21, CS_A_22
+      real CS_ainv11, CS_ainv12, CS_ainv21, CS_ainv22
+      real CS_Atmp, CS_Jac, CS_u1, CS_u2, CS_F1, CS_F2
+      real dF1_dx1, dF2_dx2, Diff_xi1, Diff_xi2, CS_Flux
+      real dx1v, dx2v

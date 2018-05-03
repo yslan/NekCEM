@@ -1,0 +1,760 @@
+c-----------------------------------------------------------------------
+c
+c  USER SPECIFIED ROUTINES:
+c
+c     - boundary conditions
+c     - initial conditions
+c     - variable properties
+c     - forcing function for fluid (f)
+c     - forcing function for passive scalar (q)
+c     - general purpose routine for checking errors etc.
+c
+c-----------------------------------------------------------------------
+      subroutine userinc
+c-----------------------------------------------------------------------
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userini(tt,mycn)
+c-----------------------------------------------------------------------
+      include 'SIZE'
+      include 'TOTAL'
+      include 'DRIFT'
+      include 'CUBESPHERE' ! check surface area
+      real xx
+      real mycn(lx1*ly1*lz1*lelt,lcdim) ! cN
+
+      integer i
+      real alpha,beta
+      real ex_po,ex_cn,ex_cp,in_turb 
+
+      real cn_xm,cn_xp,cn_ym,cn_yp !   y
+      real cp_xm,cp_xp,cp_ym,cp_yp !  p4 --- p3
+      real cn_p1,cn_p2,cn_p3,cn_p4 !   |     |
+      real cp_p1,cp_p2,cp_p3,cp_p4 !  p1 --- p2 -> x
+      real surf_area, glsum
+
+      alpha = 1.0
+      beta  = 1.0
+
+      cn_p1 = exp(1.5 - 1.0)
+      cn_p2 = exp(1.5 - 1.0)
+      cn_p3 = exp(1.5 - 1.0)
+      cn_p4 = exp(1.5 - 1.0)
+      cp_p1 = exp(2.0 + 1.0)
+      cp_p2 = exp(2.0 + 1.0)
+      cp_p3 = exp(2.0 + 1.0)
+      cp_p4 = exp(2.0 + 1.0)
+
+      do i = 1,npts
+        xx = xm1(i,1,1,1)
+        yy = ym1(i,1,1,1)
+c        in_turb = 2.0*( sin(20*pi*xx) + cos(20*pi*yy) )
+c
+c        ex_po = sin(alpha*pi*xx) + cos(beta*pi*yy)
+c        ex_cn = exp(1.5+ex_po) ! ex sol for cn
+c        ex_cp = exp(2.0-ex_po) ! ex sol for cp
+c
+c        cn_xm = exp(1.5 + cos(beta*pi*yy)) 
+c        cn_xp = exp(1.5 + cos(beta*pi*yy)) 
+c        cn_ym = exp(1.5 + sin(alpha*pi*xx)-1.0) 
+c        cn_yp = exp(1.5 + sin(alpha*pi*xx)-1.0) 
+c
+c        cp_xm = exp(2.0 - cos(beta*pi*yy)) 
+c        cp_xp = exp(2.0 - cos(beta*pi*yy)) 
+c        cp_ym = exp(2.0 - sin(beta*pi*xx)+1.0) 
+c        cp_yp = exp(2.0 - sin(beta*pi*xx)+1.0) 
+c
+c
+cC       Transfinite Mapping by boundary values
+cc        mycn(i,1) = 0.5*(xx+1.0)*cn_xm + 0.5*(1.0-xx)*cn_xp
+cc     $            + 0.5*(yy+1.0)*cn_ym + 0.5*(1.0-yy)*cn_yp
+cc     $            - cn_p1
+cc        mycn(i,2) = 0.5*(xx+1.0)*cp_xm + 0.5*(1.0-xx)*cp_xp
+cc     $            + 0.5*(yy+1.0)*cp_ym + 0.5*(1.0-yy)*cp_yp
+cc     $            - cp_p1
+
+
+        mycn(i,1) = 1.0  !ex_cn  ! + in_turb
+        mycn(i,2) = 1.0  !exp(2.0)  !ex_cp  ! + in_turb
+      enddo
+
+      surf_area = glsum(bmn,npts)
+      if(nid.eq.0) write(*,*) 'Lan>> surf_area in init',surf_area
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usersol(tt,myscn1,myscn2,myscn3,myscn4,myscn5,myscn6)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'DRIFT'
+      include 'POISSON'
+      include 'CUBESPHERE'
+
+      real tt
+      real myscn1(lx1*ly1*lz1*lelt) !potent
+      real myscn2(lx1*ly1*lz1*lelt,lcdim) !cN
+      real myscn3(lx1*ly1*lz1*lelt)
+      real myscn4(lx1*ly1*lz1*lelt)
+      real myscn5(lx1*ly1*lz1*lelt)
+      real myscn6(lx1*ly1*lz1*lelt)
+
+      integer i,j,ie
+      real xx, yy
+
+      real alpha,beta
+      real ex_po,ex_cn,ex_cp,in_turb 
+
+      alpha = 1.0
+      beta  = 1.0
+
+      npts = nx1*ny1*nz1*nelt
+      do i = 1,npts
+        xx = xm1(i,1,1,1)
+        yy = ym1(i,1,1,1)
+        in_turb = 2.0*( sin(20*pi*xx) + cos(20*pi*yy) )
+
+        ex_po = sin(alpha*pi*xx) + cos(beta*pi*yy)
+        ex_cn = exp(1.5+ex_po) ! ex sol for cn
+        ex_cp = exp(2.0-ex_po) ! ex sol for cp
+
+c        myscn2(i,1) = charge(i)  !ex_cn
+c        myscn2(i,2) = ex_cp
+c        myscn2(i,1) = EqAngAlpha(i,1,1,1)  !ex_cn
+c        myscn2(i,2) = EqAngBeta (i,1,1,1)
+c        myscn2(i,1) = CubeSphX(i,1,1,1)  !ex_cn
+c        myscn2(i,2) = CubeSphY(i,1,1,1)
+c        myscn1(i)   = CubeSphZ(i,1,1,1)
+c        cn(i,1) = 
+c        myscn1(i)   = ex_po ! ex sol for phi  
+         xx = ((CubeSphX(i,1,1,1)-BigR)**2
+     $        +CubeSphY(i,1,1,1)**2
+     $        +CubeSphZ(i,1,1,1)**2)/0.25
+         myscn2(i,1) = long(i,1,1,1)
+         myscn2(i,2) = lati(i,1,1,1)
+         myscn1(i)   = CS_Jac(i,1,1,1)
+      enddo
+
+c      do ie = 1,nelt ! check face id
+c        do j = 1,nxyz
+c          i = j + nxyz*(ie-1)
+c          myscn1(i) = if_in_region(ie)
+c        enddo
+c      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usersrc(tt,rhs_phi,rhs_cn,dummy1,dummy2,dummy3,dummy4)     
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'DRIFT'
+      include 'POISSON'
+      include 'BCS'
+
+      integer i,j,i0,ic 
+      real    tt, xx,yy
+      real    rhs_cn(lpts1,lcdim)
+      real    rhs_phi(1), dummy1(1),dummy2(1)
+      real    dummy3(1),dummy4(1)
+      real    zmax,zmin,glmax,glmin
+      real    eps, tmp2, tmp3 ! for constructing exact sol.
+      real    alpha,beta
+      real    ex_po,ex_cn,ex_cp
+      real    cnp_max ! estimating in STERIC
+
+      alpha = 1.0
+      beta  = 1.0
+      eps = 1.e-14
+      
+      call rzero(rhs_cN(1,1),npts)
+      call rzero(rhs_cN(1,2),npts)
+
+      call rzero(rhs_phi,npts)
+      do ic = 1,lcdim
+        call add2s2(rhs_phi,cN(1,ic),zvalence(ic),npts)
+      enddo
+      call add2s2(rhs_phi,charge,1.0,npts)
+      call col2(rhs_phi,bmn,npts)
+
+C     shouldn't have any BCs
+C      if (ncemface_pec(2).ge.1)  then ! second field  cn 
+C
+C         do i=1,ncemface_pec(2)
+C            j = cemface_pec(i,2)
+C            i0 = cemface(j)
+C            xx = xm1(i0,1,1,1)
+C            yy = ym1(i0,1,1,1)
+C
+C            ex_po = sin(alpha*pi*xx) + cos(beta*pi*yy)
+C            ex_cn = exp(1.5+ex_po) ! ex sol for cn
+C
+C            cN(i0,1) = ex_cn
+C         enddo
+C      endif
+C
+C      if (ncemface_pec(3).ge.1)  then ! third field cp
+C
+C         do i=1,ncemface_pec(3)
+C            j = cemface_pec(i,3) 
+C            i0 = cemface(j)      
+C            xx = xm1(i0,1,1,1)
+C            yy = ym1(i0,1,1,1)
+C
+C            ex_po = sin(alpha*pi*xx) + cos(beta*pi*yy)
+C            ex_cp = exp(2.0-ex_po) ! ex sol for cp
+C         
+C            cN(i0,2) = ex_cp
+C         enddo
+C
+C      endif
+C
+C
+Cc.....source for potential field (phi) at time
+C      call rzero(rhs_phi,npts)
+C      do ic = 1,lcdim
+C        call add2s2(rhs_phi,cN(1,ic),zvalence(ic),npts)
+C      enddo
+C      call add2s2(rhs_phi,charge,1.0,npts)
+C      call col2(rhs_phi,bmn,npts)
+Cc.....scale_potent has to be fixed 
+C
+C      if (ncemface_pec(1).gt.0) then
+C        do i = 1,ncemface_pec(1)
+C          j = cemface_pec(i,1) 
+C          i0 = cemface(j)               ! surface index to volume index
+C          xx = xm1(i0,1,1,1)
+C          yy = ym1(i0,1,1,1)
+C
+C          ex_po = sin(alpha*pi*xx) + cos(beta*pi*yy)
+C
+C          potent(i0) = ex_po
+C        enddo
+C      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine uservp (ix,iy,iz,iel)
+c---------------------------------------------------------------------
+      include 'SIZE'
+      include 'TOTAL'
+      include 'DRIFT'
+      include 'POISSON'
+      include 'CUBESPHERE'
+
+      parameter(lt=lx1*ly1*lz1*lelt)
+      common /myfields/ perm(lt),diff(lt),distp(lt),psrc(lt)
+     $                , phip(lt),phix(lt),phiy(lt),phiz(lt)
+
+      integer i,j,k,l,ie,ieg
+      real tmp, D_n_max, D_p_max
+      real tmp2, tmp3, alpha, beta
+      real ex_po, ex_cn, ex_cp, ex_ddpo
+      real xx,yy,rr
+
+      zvalence(1) = -1.0 ! cN
+      zvalence(2) =  1.0 ! cP
+
+      D_n_max = 1.0
+      D_p_max = 1.0
+
+      alpha = 1.0
+      beta  = 1.0
+      
+      do i= 1,npts 
+         d_permit(i)=  1.0  ! not used
+         d_permea(i)=  1.0  ! not used
+
+         mu_n  (i,1)=  1.0  ! D_n_max 
+         mu_n  (i,2)=  1.0  ! D_p_max  
+
+         xx = xm1(i,1,1,1)
+         yy = ym1(i,1,1,1)
+
+         ex_po = sin(alpha*pi*xx) + cos(beta*pi*yy)
+         ex_cn = exp(1.5+ex_po) ! ex sol for cn
+         ex_cp = exp(2.0-ex_po) ! ex sol for cp
+
+         ex_ddpo= -1.0*(  alpha**2*pi**2*sin(alpha*pi*xx)
+     $                  + beta**2 *pi**2*cos(beta*pi*yy)  )
+         tmp2 = -1.0 * ex_cn
+         tmp3 =  1.0 * ex_cp ! negative valence
+         
+         charge(i) = 0.0
+c         if (xx.lt.2.0.AND.xx.gt.1.0) then ! element 3
+c         if (yy.lt.2.0.AND.yy.gt.1.0) then
+           rr = (xx-1.8)**2+(yy-1.8)**2
+           if (rr.lt.0.25) then             
+             charge(i)= -1.0
+           endif
+c         endif
+c         endif
+      enddo
+
+      do ic = 1,lcdim
+        call copy(diff_n(1,ic),mu_n(1,ic),npts)
+      enddo
+
+      call construct_cubespheregrid ! Lan, cube
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat
+      include 'SIZE'
+      include 'TOTAL'
+
+C     Todo: adjuct jacobian and comment out the check(?), Lan
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat2
+      include 'SIZE'
+      include 'TOTAL'
+
+      real rscale
+      real xmin,ymin,zmin,xmax,ymax,zmax
+
+      xmin = glmin(xm1,npts)
+      xmax = glmax(xm1,npts)
+      ymin = glmin(ym1,npts)
+      ymax = glmax(ym1,npts)
+
+c      sx = 2./(xmax-xmin)
+c      sy = 2./(ymax-ymin)
+c
+c      do i = 1,npts
+c         xm1(i,1,1,1) = sx*(xm1(i,1,1,1)-xmin)-1.0
+c         ym1(i,1,1,1) = sy*(ym1(i,1,1,1)-ymin)-1.0
+c      enddo
+
+c      call construct_cubespheregrid ! Lan, cube
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userchk
+c-----------------------------------------------------------------------
+      include 'SIZE'
+      include 'TOTAL'
+      include 'DRIFT'
+      include 'POISSON'
+      include 'RTIMER'
+
+      integer i
+      real l2(6),linf(6)
+      real l2tol(6),linftol(6)
+      real dummy(lx1*ly1*lz1*lelt)
+
+      l2(1) = 0.0
+      l2(2) = 0.0
+      l2(3) = 0.0
+      l2(4) = 0.0
+      l2(5) = 0.0
+      l2(6) = 0.0
+
+      linf(1) = 0.0
+      linf(2) = 0.0
+      linf(3) = 0.0
+      linf(4) = 0.0
+      linf(5) = 0.0
+      linf(6) = 0.0
+
+      l2tol(1) = 2e-6
+      l2tol(2) = 3e-6
+      l2tol(3) = 0.0
+      l2tol(4) = 8e-8
+      l2tol(5) = 0.0
+      l2tol(6) = 0.0
+
+      linftol(1) = 5e-6
+      linftol(2) = 7e-6
+      linftol(3) = 0.0
+      linftol(4) = 2e-7
+      linftol(5) = 0.0
+      linftol(6) = 0.0
+
+      if (istep.le.10.or.mod(istep,iocomm).eq.0) then
+         call usersol(time,spotent,scn,dummy,dummy,dummy,dummy)
+
+         call cem_error(cN(1,1),scN(1,1),errcN(1,1),npts,l2(1),linf(1))
+         call cem_error(cN(1,2),scN(1,2),errcN(1,2),npts,l2(2),linf(2))
+         call cem_error(potent,spotent,epotent,npts,l2(4),linf(4))
+
+         call userprint(istep,time,dt,l2,linf,cpu_t,cpu_p_t)
+
+        if (istep.eq.nsteps) then
+           do i = 1,6
+              if (l2(i).gt.l2tol(i)) call exitt(1)
+              if (linf(i).gt.linftol(i)) call exitt(1)
+           enddo
+        endif
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userprint(istep,tt,dt,l2,linf,t1,t2)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+
+      integer istep
+      real tt,dt,t1,t2
+      real l2(6),linf(6)
+
+      integer k
+
+      if (nid.eq.0) then
+         write(6,101) istep,nelt,nx1-1,npts,tt,dt,(l2(k),k=1,6),t1,t2
+         write(6,102) istep,nelt,nx1-1,npts,tt,dt,(linf(k),k=1,6),t1,t2
+      endif
+
+ 101  format(/,i10,i6,i4,i9,1p9e10.3,e9.2,' CPU: L2')
+ 102  format(  i10,i6,i4,i9,1p9e10.3,e9.2,' CPU: Linf')
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine construct_cubespheregrid
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'POISSON'
+      include 'DRIFT'
+      include 'CUBESPHERE'
+   
+      integer i,j,k,l,ie,ieg
+      integer mx,my,mz
+      integer ierr
+      real rscale
+      real xmin,ymin,zmin,xmax,ymax,zmax
+      real xx,yy,rr
+      real FaceNum, xshift, yshift
+      real glsum
+      real surf_area
+      real tmp(lx1*ly1*lz1*lelv)
+
+      nxyz = nx1*ny1*nz1
+      npts = nxyz*nelt
+
+      mx = nx1/2
+      my = ny1/2
+      mz = nz1/2 ! nz1=0, if 2D
+
+C     Determine face id
+      do ie = 1,nelt
+        xx = xm1(mx,mx,1,ie)
+        yy = ym1(mx,my,1,ie)
+        if_in_region(ie) = 0
+
+        if (xx.gt.(-0.25*pi).AND.xx.lt.(0.25*pi)) then
+          if (yy.gt.(-0.25*pi).AND.yy.lt.(0.25*pi)) then
+            if_in_region(ie) = 1
+          endif
+        elseif (xx.lt.(0.75*pi)) then
+          if (yy.gt.(-0.25*pi).AND.yy.lt.(0.25*pi)) then
+            if_in_region(ie) = 2
+          endif
+          if (yy.gt.(0.25*pi).AND.yy.lt.(0.75*pi)) then
+            if_in_region(ie) = 3
+          endif
+        elseif (xx.lt.(1.25*pi)) then
+          if (yy.gt.(0.25*pi).AND.yy.lt.(0.75*pi)) then
+            if_in_region(ie) = 4
+          endif
+          if (yy.gt.(0.75*pi).AND.yy.lt.(1.25*pi)) then
+            if_in_region(ie) = 5
+          endif
+        elseif (xx.lt.(1.75*pi)) then
+          if (yy.gt.(0.75*pi).AND.yy.lt.(1.25*pi)) then
+            if_in_region(ie) = 6
+          endif
+        endif
+      enddo
+
+c     compute equal angular alpha and beta
+      do ie = 1,nelt
+        if (if_in_region(ie).eq.1) then  ! face 1
+          xshift = 0.0
+          yshift = 0.0
+        elseif (if_in_region(ie).eq.2) then ! face 2
+          xshift = 0.5*pi
+          yshift = 0.0
+        elseif (if_in_region(ie).eq.3) then ! face 3
+          xshift = 0.5*pi
+          yshift = 0.5*pi
+        elseif (if_in_region(ie).eq.4) then ! face 4
+          xshift = pi
+          yshift = 0.5*pi
+        elseif (if_in_region(ie).eq.5) then ! face 5
+          xshift = pi
+          yshift = pi
+        elseif (if_in_region(ie).eq.6) then ! face 6
+          xshift = 1.5*pi
+          yshift = pi
+        endif
+
+        do j = 1,nxyz
+          i = j + (ie-1)*nxyz
+          EqAngAlpha(i,1,1,1) = xm1(i,1,1,1) - xshift
+          EqAngBeta (i,1,1,1) = ym1(i,1,1,1) - yshift
+        enddo
+      enddo
+
+c     compute spherical coordinate
+      BigR = param(3) ! Lan, tmp, radius of sphere
+      CubeLength = BigR/sqrt(3.0)
+      do ie = 1,nelt
+        if (if_in_region(ie).eq.1) then
+          do j = 1,nxyz
+            i = j + (ie-1)*nxyz
+            CS_xtmp = CubeLength * tan(EqAngAlpha(i,1,1,1))
+            CS_ytmp = CubeLength * tan(EqAngBeta (i,1,1,1))
+            CS_rtmp = sqrt(
+     $                CubeLength**2 + CS_xtmp**2 + CS_ytmp**2)
+            CubeSphX(i,1,1,1) =  BigR * CubeLength / CS_rtmp
+            CubeSphY(i,1,1,1) =  BigR * CS_xtmp / CS_rtmp
+            CubeSphZ(i,1,1,1) =  BigR * CS_ytmp / CS_rtmp
+          enddo
+        elseif (if_in_region(ie).eq.2) then
+          do j = 1,nxyz
+            i = j + (ie-1)*nxyz
+            CS_xtmp = CubeLength * tan(EqAngAlpha(i,1,1,1))
+            CS_ytmp = CubeLength * tan(EqAngBeta (i,1,1,1))
+            CS_rtmp = sqrt(
+     $                CubeLength**2 + CS_xtmp**2 + CS_ytmp**2)
+            CubeSphX(i,1,1,1) = -BigR * CS_xtmp / CS_rtmp
+            CubeSphY(i,1,1,1) =  BigR * CubeLength / CS_rtmp
+            CubeSphZ(i,1,1,1) =  BigR * CS_ytmp / CS_rtmp
+          enddo
+        elseif (if_in_region(ie).eq.3) then
+          do j = 1,nxyz
+            i = j + (ie-1)*nxyz
+            CS_xtmp = CubeLength * tan(EqAngAlpha(i,1,1,1))
+            CS_ytmp = CubeLength * tan(EqAngBeta (i,1,1,1))
+            CS_rtmp = sqrt(
+     $                CubeLength**2 + CS_xtmp**2 + CS_ytmp**2)
+            CubeSphX(i,1,1,1) = -BigR * CS_xtmp / CS_rtmp
+            CubeSphY(i,1,1,1) = -BigR * CS_ytmp / CS_rtmp
+            CubeSphZ(i,1,1,1) =  BigR * CubeLength / CS_rtmp
+          enddo
+        elseif (if_in_region(ie).eq.4) then
+          do j = 1,nxyz
+            i = j + (ie-1)*nxyz
+            CS_xtmp = CubeLength * tan(EqAngAlpha(i,1,1,1))
+            CS_ytmp = CubeLength * tan(EqAngBeta (i,1,1,1))
+            CS_rtmp = sqrt(
+     $                CubeLength**2 + CS_xtmp**2 + CS_ytmp**2)
+            CubeSphX(i,1,1,1) = -BigR * CubeLength / CS_rtmp
+            CubeSphY(i,1,1,1) = -BigR * CS_ytmp / CS_rtmp
+            CubeSphZ(i,1,1,1) = -BigR * CS_xtmp / CS_rtmp
+          enddo
+        elseif (if_in_region(ie).eq.5) then
+          do j = 1,nxyz
+            i = j + (ie-1)*nxyz
+            CS_xtmp = CubeLength * tan(EqAngAlpha(i,1,1,1))
+            CS_ytmp = CubeLength * tan(EqAngBeta (i,1,1,1))
+            CS_rtmp = sqrt(
+     $                CubeLength**2 + CS_xtmp**2 + CS_ytmp**2)
+            CubeSphX(i,1,1,1) =  BigR * CS_ytmp / CS_rtmp
+            CubeSphY(i,1,1,1) = -BigR * CubeLength / CS_rtmp
+            CubeSphZ(i,1,1,1) = -BigR * CS_xtmp / CS_rtmp
+          enddo
+        elseif (if_in_region(ie).eq.6) then
+          do j = 1,nxyz
+            i = j + (ie-1)*nxyz
+            CS_xtmp = CubeLength * tan(EqAngAlpha(i,1,1,1))
+            CS_ytmp = CubeLength * tan(EqAngBeta (i,1,1,1))
+            CS_rtmp = sqrt(
+     $                CubeLength**2 + CS_xtmp**2 + CS_ytmp**2)
+            CubeSphX(i,1,1,1) =  BigR * CS_ytmp / CS_rtmp
+            CubeSphY(i,1,1,1) =  BigR * CS_xtmp / CS_rtmp
+            CubeSphZ(i,1,1,1) = -BigR * CubeLength / CS_rtmp
+          enddo
+        endif
+      enddo
+
+      call copy(xm1,CubeSphX,npts)
+      call copy(ym1,CubeSphY,npts)
+      call copy(zm1,CubeSphZ,npts)
+      call copy(xmn,CubeSphX,npts)
+      call copy(ymn,CubeSphY,npts)
+      call copy(zmn,CubeSphZ,npts)
+
+c     longitudes and latitudes
+      do i = 1,npts
+        CubeSphXtmp = CubeSphX(i,1,1,1)
+        CubeSphYtmp = CubeSphY(i,1,1,1)
+        CubeSphZtmp = CubeSphZ(i,1,1,1)
+        long(i,1,1,1) = atan2(CubeSphYtmp, CubeSphXtmp)
+        lati(i,1,1,1) = atan2(CubeSphZtmp,
+     $     sqrt(CubeSphXtmp**2  + CubeSphYtmp**2))
+        sn_long(i,1,1,1) = sin(long(i,1,1,1))
+        cs_long(i,1,1,1) = cos(long(i,1,1,1))
+        sn_lati(i,1,1,1) = sin(lati(i,1,1,1))
+        cs_lati(i,1,1,1) = cos(lati(i,1,1,1))
+      enddo
+
+c     A matrix
+      do ie = 1,nelt
+        if ( if_in_region(ie) .eq. 1 ) then
+          do j = 1,nxyz
+            i = j + nxyz*(ie-1)
+               arg1 = EqAngAlpha(i,1,1,1)
+               arg2 = EqAngBeta (i,1,1,1)
+            CS_A_11(i,1,1,1) =  BigR * cs_long(i,1,1,1)**2
+     $         * cs_lati(i,1,1,1) / cos(arg1)**2
+            CS_A_12(i,1,1,1) =  0.0
+            CS_A_21(i,1,1,1) = -BigR * sn_long(i,1,1,1)
+     $         * cs_long(i,1,1,1) * sn_lati(i,1,1,1)
+     $         * cs_lati(i,1,1,1) / cos(arg1)**2
+            CS_A_22(i,1,1,1) =  BigR * cs_long(i,1,1,1)
+     $         * cs_lati(i,1,1,1)**2 / cos(arg2)**2
+          enddo
+        elseif ( if_in_region(ie) .eq. 2 ) then
+          do j = 1,nxyz
+            i = j + nxyz*(ie-1)
+               arg1 = EqAngAlpha(i,1,1,1)
+               arg2 = EqAngBeta (i,1,1,1)
+            CS_A_11(i,1,1,1) = BigR * sn_long(i,1,1,1)**2
+     $         * cs_lati(i,1,1,1) / cos(arg1)**2
+            CS_A_12(i,1,1,1) =  0.0
+            CS_A_21(i,1,1,1) = BigR * sn_long(i,1,1,1)
+     %         * cs_long(i,1,1,1) * sn_lati(i,1,1,1)
+     %         * cs_lati(i,1,1,1) / cos(arg1)**2
+            CS_A_22(i,1,1,1) = BigR * sn_long(i,1,1,1)
+     %         * cs_lati(i,1,1,1)**2 / cos(arg2)**2
+            enddo
+        elseif ( if_in_region(ie) .eq. 3 ) then
+          do j = 1,nxyz
+            i = j + nxyz*(ie-1)
+               arg1 = EqAngAlpha(i,1,1,1)
+               arg2 = EqAngBeta (i,1,1,1)
+            CS_A_11(i,1,1,1) =  BigR * sn_long(i,1,1,1)
+     $         * sn_lati(i,1,1,1) / cos(arg1)**2
+            CS_A_12(i,1,1,1) = -BigR * cs_long(i,1,1,1)
+     $         * sn_lati(i,1,1,1) / cos(arg2)**2
+            CS_A_21(i,1,1,1) =  BigR * cs_long(i,1,1,1)
+     $         * sn_lati(i,1,1,1)**2 / cos(arg1)**2
+            CS_A_22(i,1,1,1) = BigR * sn_long(i,1,1,1)
+     $         * sn_lati(i,1,1,1)**2 / cos(arg2)**2
+          enddo
+        elseif ( if_in_region(ie) .eq. 4 ) then
+          do j = 1,nxyz
+            i = j + nxyz*(ie-1)
+               arg1 = EqAngAlpha(i,1,1,1)
+               arg2 = EqAngBeta (i,1,1,1)
+            CS_A_11(i,1,1,1) =  0.0
+            CS_A_12(i,1,1,1) =  BigR * cs_long(i,1,1,1)**2
+     %         * cs_lati(i,1,1,1) / cos(arg2)**2
+            CS_A_21(i,1,1,1) = BigR * cs_long(i,1,1,1)
+     $         * cs_lati(i,1,1,1)**2 / cos(arg1)**2
+            CS_A_22(i,1,1,1) = -BigR * sn_long(i,1,1,1)
+     $         * cs_long(i,1,1,1) * sn_lati(i,1,1,1)
+     $         * cs_lati(i,1,1,1) / cos(arg2)**2
+          enddo
+        elseif ( if_in_region(ie) .eq. 5 ) then
+          do j = 1,nxyz
+            i = j + nxyz*(ie-1)
+               arg1 = EqAngAlpha(i,1,1,1)
+               arg2 = EqAngBeta (i,1,1,1)
+            CS_A_11(i,1,1,1) =  0.0
+            CS_A_12(i,1,1,1) = BigR * sn_long(i,1,1,1)**2
+     $         * cs_lati(i,1,1,1) / cos(arg2)**2
+            CS_A_21(i,1,1,1) = BigR * sn_long(i,1,1,1)
+     $         * cs_lati(i,1,1,1)**2 / cos(arg1)**2
+            CS_A_22(i,1,1,1) = BigR * sn_long(i,1,1,1)
+     $         * cs_long(i,1,1,1) * sn_lati(i,1,1,1)
+     $         * cs_lati(i,1,1,1) / cos(arg2)**2
+            enddo
+        elseif ( if_in_region(ie) .eq. 6 ) then
+          do j = 1,nxyz
+            i = j + nxyz*(ie-1)
+               arg1 = EqAngAlpha(i,1,1,1)
+               arg2 = EqAngBeta (i,1,1,1)
+            CS_A_11(i,1,1,1) = -BigR * cs_long(i,1,1,1)
+     $         * sn_lati(i,1,1,1) / cos(arg1)**2
+            CS_A_12(i,1,1,1) = BigR * sn_long(i,1,1,1)
+     $         * sn_lati(i,1,1,1) / cos(arg2)**2
+            CS_A_21(i,1,1,1) = BigR * sn_long(i,1,1,1)
+     $         * sn_lati(i,1,1,1)**2 / cos(arg1)**2
+            CS_A_22(i,1,1,1) =  BigR * cs_long(i,1,1,1)
+     $         * sn_lati(i,1,1,1)**2 / cos(arg2)**2
+          enddo
+        endif
+      enddo
+
+c     wind field vectors
+      CS_u_0 = 2.0*pi*BigR  ! check if needed divided by time
+      alpha_0 = 0.0
+      cs_alpha0 = cos(alpha_0)
+      sn_alpha0 = sin(alpha_0)
+      do i = 1,npts
+            CS_Atmp = CS_A_11(i,1,1,1)*CS_A_22(i,1,1,1)
+     $              - CS_A_12(i,1,1,1)*CS_A_21(i,1,1,1)
+         CS_ainv11(i,1,1,1) =  CS_A_22(i,1,1,1)/CS_Atmp
+         CS_ainv12(i,1,1,1) = -CS_A_12(i,1,1,1)/CS_Atmp
+         CS_ainv21(i,1,1,1) = -CS_A_21(i,1,1,1)/CS_Atmp
+         CS_ainv22(i,1,1,1) =  CS_A_11(i,1,1,1)/CS_Atmp
+            arg1 = EqAngAlpha(i,1,1,1)
+            arg2 = EqAngBeta (i,1,1,1)
+         CS_Jac(i,1,1,1) = BigR**2 / cos(arg1)**2 / cos(arg2)**2
+     $      / ( 1.0 + tan(arg1)**2 + tan(arg2)**2 )**1.5
+         V_long(i,1,1,1) = CS_u_0 * (cs_alpha0 *cs_lati(i,1,1,1)
+     $      + sn_alpha0 * cs_long(i,1,1,1) * sn_lati(i,1,1,1))
+         V_lati(i,1,1,1) = -CS_u_0 * sn_alpha0 *sn_long(i,1,1,1)
+            V_long_tmp = V_long(i,1,1,1)
+            V_lati_tmp = V_lati(i,1,1,1)
+         Vabs(i,1,1,1) = sqrt(V_long_tmp**2 + V_lati_tmp**2)
+         CS_V_x(i,1,1,1) = -V_long_tmp * sn_long(i,1,1,1)
+     $      -V_lati_tmp * sn_lati(i,1,1,1) * cs_long(i,1,1,1)
+         CS_V_y(i,1,1,1) =  V_long_tmp * cs_long(i,1,1,1)
+     $      -V_lati_tmp * sn_lati(i,1,1,1) * sn_long(i,1,1,1)
+         CS_V_z(i,1,1,1) =  V_lati_tmp * cs_lati(i,1,1,1)
+         CS_u1(i,1,1,1) = CS_ainv11(i,1,1,1) * V_long(i,1,1,1)
+     $             +CS_ainv12(i,1,1,1) * V_lati(i,1,1,1)
+         CS_u2(i,1,1,1) = CS_ainv21(i,1,1,1) * V_long(i,1,1,1)
+     $             +CS_ainv22(i,1,1,1) * V_lati(i,1,1,1)
+         CS_F1(i,1,1,1) = CS_Jac(i,1,1,1) * CS_u1(i,1,1,1)
+         CS_F2(i,1,1,1) = CS_Jac(i,1,1,1) * CS_u2(i,1,1,1)
+      enddo
+
+      if(nid.eq.0) write(*,*)'Lan>> chk Jac start'
+      do ie=1,nelt
+        call CHKJAC(CS_Jac(1,1,1,ie),nxyz,ie,xm1,ym1,zm1,ndim,ierr)
+      enddo
+
+      call copy(jacm1,CS_Jac,npts)
+
+      call rone(tmp,npts)
+      call col3(tmp,CS_Jac,bmn,npts)
+      surf_area = glsum(tmp,npts)
+      if (nid.eq.0) write(*,*)'Lan >> surf_area=',surf_area
+
+      call col2(bmn,CS_Jac,npts)
+      call copy(bm1,bmn,npts)
+
+      do ie=1,nelt
+         dF1_dx1(1:nx1,1:ny1,1,ie) =
+     $      matmul(Diff_xi1(1:nx1,1:ny1,1,ie),CS_F1(1:nx1,1:ny1,1,ie)) 
+         dF2_dx2(1:nx1,1:ny1,1,ie) =
+     $      matmul(CS_F2(1:nx1,1:ny1,1,1),Diff_xi2(1:nx1,1:ny1,1,ie))
+         CS_Flux(1:nx1,1:ny1,1,ie) =
+     $        2.0/dx1v * dF1_dx1(1:nx1,1:ny1,1,ie)
+     $      + 2.0/dx2v * dF2_dx2(1:nx1,1:ny1,1,ie)
+      enddo
+
+      return
+      end
