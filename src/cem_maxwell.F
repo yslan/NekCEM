@@ -69,6 +69,7 @@ c---------------------------------------------------------------------
       include 'TOTAL'
       include 'EMWAVE'
       include 'PML'
+      include 'CUBESPHERE'
       integer  i,npts3,nxzfl3
 
       npts3 = 3*npts
@@ -103,6 +104,10 @@ c     Coordinates, geometry, field variables
       call rzero (erren,npts3)
       call rzero (reshn,npts3)
       call rzero (resen,npts3)
+
+      call rzero (CS_h,npts) ! Lan, CUBESPHERE
+      call rzero (CS_kh,npts)
+      call rzero (resCS,npts)
 
 c     Geometry related
       call rzero (w3mn ,nxyz)
@@ -326,14 +331,29 @@ c     Time step the PDE using a 5-stage 4th-order RK method.
       include 'TOTAL'
       include 'EMWAVE'
       include 'RK5'
+      include 'CUBESPHERE'
+
+c      do rkstep = 1,5
+c         call rk_c(rkstep)
+c         call cem_maxwell_op
+c         call rk_maxwell_ab(rkstep)
+c      enddo
+c
+c      if (iffilter) call q_filter(0.01)
+
 
       do rkstep = 1,5
          call rk_c(rkstep)
-         call cem_maxwell_op
-         call rk_maxwell_ab(rkstep)
+         call CS_adv_op ! << cem_maxwell_op
+         call rk_CS_adv_ab(rkstep) ! << rk_maxwell_ab
       enddo
 
-      if (iffilter) call q_filter(0.01)
+      
+      if (iffilter) then ! ToDo:modified later, Lan
+        call copy(HN(1,1),CS_h,npts)
+        call q_filter(0.01)
+        call copy(CS_h,HN(1,1),npts)
+      endif
 
       return
       end
@@ -503,7 +523,7 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
-      subroutine cem_maxwell
+      subroutine cem_maxwell  ! Lan
 c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'

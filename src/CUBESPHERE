@@ -42,7 +42,9 @@
      $     Diff_xi2(lx1,ly1,lz1,lelt),
      $     CS_Flux(lx1,ly1,lz1,lelt),
      $     CS_h(lx1*ly1*lz1*lelt),
-     $     dx1v, dx2v, CS_delta
+     $     dx1v, dx2v, CS_delta,
+     $     resCS(lx1*ly1*lz1*lelt),
+     $     CS_kh(lx1*ly1*lz1*lelt)
 
       real EqAngAlpha,EqAngBeta
       real CubeSphX, CubeSphY, CubeSphZ
@@ -60,4 +62,5 @@
       real CS_Atmp, CS_Jac, CS_u1, CS_u2, CS_F1, CS_F2
       real dF1_dx1, dF2_dx2, Diff_xi1, Diff_xi2, CS_Flux
       real dx1v, dx2v
-      real CS_delta, CS_h
+      real CS_delta, CS_h,CS_kh
+      real resCS
