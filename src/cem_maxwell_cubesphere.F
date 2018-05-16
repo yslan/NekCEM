@@ -4,9 +4,7 @@ c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'TOTAL'
-c      include 'EMWAVE'
       include 'RK5' ! rk time
-cc      include 'PML'
       include 'CUBESPHERE' ! rk time
 
       common /scrns/ srflx(6*2*ldim*lx1*lz1*lelt) !ToDo: only need 1*2*ldim*nxyfl,Lan
@@ -48,9 +46,9 @@ c-----------------------------------------------------------------------
       real w0(lx1*ly1*lz1*lelt)
       real w1(lx1*ly1*lz1*lelt)
       real w2(lx1*ly1*lz1*lelt)
-      real glamax
 
-      call CS_cem_div_skew_sym(w0,w1,w2,CS_u1,CS_u2,CS_h,CS_Jac)
+c     resCS = dh/dt (volume)
+      call CS_cem_div_skew_sym(w0,w1,w2,CS_V_u1,CS_V_u2,CS_h,CS_Jac)
 
       call copy(resCS,w0,npts)
       call chsign(resCS,npts)
@@ -64,7 +62,6 @@ c     restrict u to faces
 c     prepare for future eq.
       include 'SIZE'
       include 'TOTAL'
-c      include 'EMWAVE'
       include 'CUBESPHERE'
 
 c     update  CS_fadv
@@ -111,52 +108,31 @@ c-----------------------------------------------------------------------
       real out_flx(2*ldim*nx1*nz1*lelt) ! global
 
       real tmp
-      real CS_pen ! ToDO: define somewhere else, Lan
 
       CS_pen = (nx1-1)*nx1*0.5 * 2.0 ! if using 1.0, h begins going to negative
 
       nxzfl = nx1*nz1*nelt*2*ndim
 
-      call rzero(tmp_flx,nxzfl)
-
-c      if (ifcentral) C0 = 0.0
-c      if (ifupwind) C0 = 1.0   ! ToDo, integrate with penalty, Lan
-
-c      k = nxzfl
-c      do i = 1,nxzfl
-cc  -(n x E)_x
-c         srflx(0*k+i) = -unym(i)*fEN(i,3)
-cc  -(n x E)_y
-c         srflx(1*k+i) = unxm(i)*fEN(i,3)
-cc  -(n x H)_z
-c         srflx(2*k+i) = -unxm(i)*fHN(i,2)+unym(i)*fHN(i,1)
-c      enddo
-c
-cc      call userfsrc(rktime,srflx(3*k+1),srflx(4*k+1),srflx(2*k+1), ToDo, Lan
-cc     $                     srflx(0*k+1),srflx(1*k+1),srflx(5*k+1))
-
 C     Compute: out_flx = (h^- - h^+)
       k = nxzfl
       do i = 1,nxzfl
         j = cemface(i) ! volume index
-        srflx(0*k+i)   = CS_h(j)
-        tmp_flx(0*k+i) = CS_h(j)
+        srflx(0*k+i) = CS_h(j)
+        tmp_flx(i)   = CS_h(j)
       enddo
 
       t0 = dclock()
-      call gs_op_fields(gsh_face,srflx,nxzfl,1,1,1,0)
+      call gs_op_fields(gsh_face,srflx,nxzfl,1,1,1,0)   ! srflx = q^- + q^+
       call measure_comm(t0)
 
-      call add3s2(out_flx,tmp_flx,srflx,2.0,-1.0,nxzfl) ! 2*tmp_flx - srflx
+      call add3s2(out_flx,tmp_flx,srflx,2.0,-1.0,nxzfl) ! out_flx = 2*tmp_flx - srflx
 
 C     Compute:
       do i = 1,nxzfl
         j = cemface(i)
-        tmp =    (CS_u1(j)*unxm(i) + CS_u2(j)*unym(i))
-     $      - abs(CS_u1(j)*unxm(i) + CS_u2(j)*unym(i))
-c        tmp = 0.5 * tmp * CS_pen * CS_Jac(j,1,1,1) * out_flx(i)
-        tmp = 0.5 * tmp * CS_pen *  out_flx(i) / rxm1(j,1,1,1)
-        srflx(0*k+i) = tmp
+        tmp =    (CS_V_u1(j)*unxm(i) + CS_V_u2(j)*unym(i))
+     $      - abs(CS_V_u1(j)*unxm(i) + CS_V_u2(j)*unym(i))
+        srflx(0*k+i) = 0.5 * CS_pen * tmp *  out_flx(i) / rxm1(j,1,1,1) ! rxm1=rym1 in this case
       enddo
 
       return
@@ -195,20 +171,162 @@ c-----------------------------------------------------------------------
       stime0=dclock()
 
 c     kHX=rk4a(i)*kHX
-      ca = rk4a(ii)
+      ca = rk4a(ii) ! 
       cb = rk4b(ii)
 
-      call rk4_upd(CS_h,CS_kh,resCS,cb,ca,dt,npts)
+      call rk4_upd(CS_h,CS_kh,resCS,cb,ca,dt,npts) ! kh = ca*kh + dt*resCS
+                                                   !  h =     h + cb*kh 
 
       stime0=dclock()-stime0
 
 #ifdef TIMER
       if     (istep.le.10.or.mod(istep,iocomm).eq.0) then
          if (nid.eq.0) then
-            write(6,*) 'rk_maxwell_ab                (sec)::',stime0
+            write(6,*) 'rk_CS_adv_ab                (sec)::',stime0
          endif
       endif
 #endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+C     The below subroutines compute the customize operaters for cube sphere
+C     include:    
+C        - partial derivative
+C        - div
+C        - div in skew-symmetric form
+c-----------------------------------------------------------------------
+      subroutine CS_local_dxi1(ur,u,N,e,D)
+c     Output: ur          Input: u,N,e,D
+      real ur(0:N,0:N)
+      real u (0:N,0:N,1)
+      real D (0:N,0:N)
+      integer e
+c
+      m1 = N+1
+      call mxm (D ,m1,u(0,0,e),m1,ur,m1)
+c
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine CS_local_dxi2(us,u,N,e,Dt)
+c     Output: us          Input: u,N,e,Dt
+      real us(0:N,0:N)
+      real u (0:N,0:N,1)
+      real Dt(0:N,0:N)
+      integer e
+c
+      m1 = N+1
+      call mxm (u(0,0,e),m1,Dt,m1,us,m1)
+c
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine CS_cem_div(w0,w1,w2,u1,u2,h,EqAngJac)
+c-----------------------------------------------------------------------
+c     div: w = 1/J d/dx (J u1 h) + 1/J d/dy (J u2 h)
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+
+      real w0(1),w1(1),w2(1),w3(1),u1(1),u2(1),u3(1),h(1),EqAngJac(1)
+      integer e,i,j,k,nn
+
+      common /div3d/ ur1(lx1*ly1*lz1),us1(lx1*ly1*lz1),ut1(lx1*ly1*lz1)
+     $             , ur2(lx1*ly1*lz1),us2(lx1*ly1*lz1),ut2(lx1*ly1*lz1)
+     $             , ur3(lx1*ly1*lz1),us3(lx1*ly1*lz1),ut3(lx1*ly1*lz1)
+      real ur1,us1,ut1,ur2,us2,ut2,ur3,us3,ut3
+      real ju1h(lx1*ly1*lz1*lelv),ju2h(lx1*ly1*lz1*lelv)
+
+      nn = nx1-1
+c
+      if (if3d) then ! Lan, for now only have 2D
+
+      else
+
+         call col4(ju1h,EqAngJac,u1,h,npts)
+         call col4(ju2h,EqAngJac,u2,h,npts)
+
+         do e = 1,nelt
+           j = nxyz*(e-1)
+           call CS_local_dxi1(ur1,ju1h,nn,e,dxm1) ! ur1=dxm1*u1
+           call CS_local_dxi2(us2,ju2h,nn,e,dxtm1)! us2=u2*dxtm1
+
+           do i = 1,nxyz
+             k = i + nxyz*(e-1)
+             w1(k) = ur1(i)/rxm1(k,1,1,1)
+             w2(k) = us2(i)/sym1(k,1,1,1)
+
+             w0(k) = (w1(k)+w2(k))/EqAngJac(k)
+           enddo
+         enddo
+
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine CS_cem_div_skew_sym(w0,w1,w2,u1,u2,h,EqAngJac)
+c-----------------------------------------------------------------------
+c     div: w = 1/J d/dx (J u1 h) + 1/J d/dy (J u2 h)
+c     In this mode, w1 and w2 does not important, ToDo: remove w1 w2, Lan
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+
+      real w0(1),w1(1),w2(1),w3(1),u1(1),u2(1),u3(1),h(1),EqAngJac(1)
+      integer e,i,j,k,nn
+
+      common /div3d/ ur1(lx1*ly1*lz1),us1(lx1*ly1*lz1),ut1(lx1*ly1*lz1)
+     $             , ur2(lx1*ly1*lz1),us2(lx1*ly1*lz1),ut2(lx1*ly1*lz1)
+     $             , ur3(lx1*ly1*lz1),us3(lx1*ly1*lz1),ut3(lx1*ly1*lz1)
+      real ur1,us1,ut1,ur2,us2,ut2,ur3,us3,ut3
+      real ju1h(lx1*ly1*lz1*lelv),ju2h(lx1*ly1*lz1*lelv)
+      real ju1 (lx1*ly1*lz1*lelv),ju2 (lx1*ly1*lz1*lelv)
+
+      nn = nx1-1
+c
+      if (if3d) then ! Lan, for now only have 2D
+
+      else
+         call CS_cem_div(w0,w1,w2,u1,u2,h,EqAngJac)
+
+         call col3(ju1,EqAngJac,u1,npts)
+         call col3(ju2,EqAngJac,u2,npts)
+
+         do e = 1,nelt
+           j = nxyz*(e-1)
+           call CS_local_dxi1(ur1,h,nn,e,dxm1) ! ur1=dxm1*u1
+           call CS_local_dxi2(us2,h,nn,e,dxtm1)! us2=u2*dxtm1
+
+           do i = 1,nxyz
+             k = i + nxyz*(e-1)
+             w1(k) = ur1(i)/rxm1(k,1,1,1)
+             w2(k) = us2(i)/sym1(k,1,1,1)
+
+             w1(k) = w1(k) * ju1(k)
+             w2(k) = w2(k) * ju2(k)
+             w0(k) = w0(k) + (w1(k)+w2(k))/EqAngJac(k)
+           enddo
+         enddo
+
+         do e = 1,nelt
+           j = nxyz*(e-1)
+           call CS_local_dxi1(ur1,ju1,nn,e,dxm1) ! ur1=dxm1*u1
+           call CS_local_dxi2(us2,ju2,nn,e,dxtm1)! us2=u2*dxtm1
+
+           do i = 1,nxyz
+             k = i + nxyz*(e-1)
+             w1(k) = ur1(i)/rxm1(k,1,1,1)
+             w2(k) = us2(i)/sym1(k,1,1,1)
+
+             w1(k) = w1(k) * h(k)
+             w2(k) = w2(k) * h(k)
+             w0(k) = w0(k) + (w1(k)+w2(k))/EqAngJac(k)
+           enddo
+         enddo
+
+      endif
 
       return
       end
