@@ -30,13 +30,14 @@ c-----------------------------------------------------------------------
 
 c     Compute ini field
       u0 = 2.0*pi*SphR
-      alpha = -pi/2
+      alpha = -pi/4.0
       delta = 0.5
 
       call get_one_way_wind(CS_V_long,CS_V_lati,CS_V_X,CS_V_Y,CS_V_Z
      $                     ,CS_V_u1,CS_V_u2,alpha,u0)
       call get_testcase_h(CS_h,SphR,delta)
 
+c     output step 0
       call usersol(tt,hx,hy,hz,ex,ey,ez)
 
       return
@@ -59,7 +60,6 @@ c-----------------------------------------------------------------------
       integer i,n
 
       n = nx1*ny1*nz1*nelt
-
 
       call copy(HN(1,1),CS_h,n)
       call copy(HN(1,2),CS_V_u1,n)
