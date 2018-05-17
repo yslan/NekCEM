@@ -29,7 +29,7 @@ c=====================================================================
      $     CubeSphX  (lpts1),     ! X, Cartesian coordinates on sphere
      $     CubeSphY  (lpts1),     ! Y, Cartesian coordinates on sphere
      $     CubeSphZ  (lpts1),     ! Z, Cartesian coordinates on sphere
-     $     BigR,                  ! R, geographic coordinate system
+     $     SphR,                  ! R, geographic coordinate system
      $     long (lpts1),          ! longitude, geographic coordinate system 
      $     lati (lpts1),          ! latitude, geographic coordinate system 
      $     sn_long (lpts1),        ! sin(longitude)
@@ -38,7 +38,7 @@ c=====================================================================
      $     cs_lati (lpts1)         ! cos(latitude)
       real CubeLength,EqAngAlph,EqAngBeta
       real CubeSphX,CubeSphY,CubeSphZ
-      real BigR,long,lati
+      real SphR,long,lati
       real sn_long,cs_long,sn_lati,cs_lati
 
       common /cs_transform/

@@ -1,6 +1,7 @@
 c-----------------------------------------------------------------------
 c
-c     Box geometry with periodic boundary conditions.
+c     2d cubed sphere simulation
+c     input mesh: 2d surface of dice (ladder shape)
 c
 c-----------------------------------------------------------------------
       subroutine userinc(tt,incfhx,incfhy,incfhz,incfex,incfey,incfez)
@@ -20,10 +21,21 @@ c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'TOTAL'
+      include 'CUBESPHERE' ! ToDo: use local variables, Lan
 
       real tt
       real hx(lpts),hy(lpts),hz(lpts)
       real ex(lpts),ey(lpts),ez(lpts)
+      real u0,alpha,delta
+
+c     Compute ini field
+      u0 = 2.0*pi*SphR
+      alpha = -pi/2
+      delta = 0.5
+
+      call get_one_way_wind(CS_V_long,CS_V_lati,CS_V_X,CS_V_Y,CS_V_Z
+     $                     ,CS_V_u1,CS_V_u2,alpha,u0)
+      call get_testcase_h(CS_h,SphR,delta)
 
       call usersol(tt,hx,hy,hz,ex,ey,ez)
 
@@ -60,7 +72,6 @@ c-----------------------------------------------------------------------
       call copy(soley,CS_V_long,n)
       call copy(solez,CS_V_lati,n)
 
-
       return
       end
 c-----------------------------------------------------------------------
@@ -95,11 +106,6 @@ c-----------------------------------------------------------------------
       include 'TOTAL'
       include 'EMWAVE'
 
-c     These don't do anything! This is a temporary measure until
-c
-c     https://github.com/NekCEM/NekCEM/issues/12
-c
-c     is resolved.
       integer ix,iy,iz,iel
 
       integer i
@@ -109,9 +115,9 @@ c     is resolved.
          permeability(i) = 1.0
       enddo
 
-      if (nid.eq.0) write(*,*)'Lan>>usrvp here'
-c     vvvvvv Cubed Sphere Basics
+c     Cubed Sphere Basics
       call construct_cubespheregrid ! Lan, cube
+      call CS_adv_basic_tests       ! compute tests for div Jac
 
       return
       end
@@ -138,18 +144,6 @@ c-----------------------------------------------------------------------
 
       npts = nx1*ny1*nz1*nelt
 
-c      xmin = glmin(xm1,n)
-c      xmax = glmax(xm1,n)
-c      ymin = glmin(ym1,n)
-c      ymax = glmax(ym1,n)
-c
-c      sx = 2.0*pi/(xmax-xmin)
-c      sy = 2.0*pi/(ymax-ymin)
-c
-c      do i = 1,n
-c         xm1(i,1,1,1) = sx*(xm1(i,1,1,1)-xmin)
-c         ym1(i,1,1,1) = sy*(ym1(i,1,1,1)-ymin)
-c      enddo
 
 c     Rescale Mesh: first face from [0,1] to [-pi/4,pi/4]
 
@@ -277,64 +271,133 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
+c     This subroutine perform basic test to verified CS's settings.
+c     Mainly test integral, divergent.
+      subroutine CS_adv_basic_tests
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CUBESPHERE'
+
+      real xx,yy,zz
+      real glsum,glamax
+
+      real csh(lpts1)
+      real vvx(lpts1),vvy(lpts1),vvz(lpts1)
+      real vu1(lpts1),vu2(lpts1)
+      real vlong(lpts1),vlati(lpts1)
+
+      real u0, alpha, delta
+
+      real w1(lpts1),w2(lpts1),tmp_v(lpts1)
+      real tmp_f(lpts1),tmp_wf(lpts1)
+      real tmp_result
+      real surf_area
+
+      real div_out(lpts1),div_out2(lpts1)
+      real div_err(lpts1),ex_div(lpts1)
+      real linf_div
+
+      integer i,j,k,ie
+
+      npts = nx1*ny1*nz1*nelt
+
+c     Test CS_Jac
+c     Test 1: test surface integral
+      surf_area = glsum(bmn,npts)
+      if (nid.eq.0) write(*,*)'Lcheck surf area=',surf_area,
+     $                        'exact: 4piR=',4.0*pi*SphR**2
+
+c     Test 2: int (x-1)**2 + yy**2 + zz**2 dS = 4*pi*R^2*(R^2+1)
+      do i=1,npts
+        xx = CubeSphX (i)
+        yy = CubeSphY (i)
+        zz = CubeSphZ (i)
+        tmp_f(i) = (xx-1.0)**2 + yy**2 + zz**2
+      enddo
+      call col3(tmp_wf,tmp_f,bmn,npts)
+      tmp_result = glsum(tmp_wf,npts)
+      if (nid.eq.0) then
+        write(*,*)'Lcheck>> ==========================================='
+        write(*,*)'Lcheck>> [An execise:'
+        write(*,*)'Lcheck>> [ int (x-1)**2 + yy**2 + zz**2 dS'
+        write(*,*)'Lcheck>> [ the numerical integral is',tmp_result
+        write(*,*)'Lcheck>> [   ans:   4*pi*R^2(R^2+1)='
+     $            ,4.0*pi*SphR**2*(SphR**2+1.0)
+        write(*,*)'Lcheck>> ==========================================='
+      endif
+
+c     Test div
+      u0 = 2*pi*SphR
+      alpha = 0.0
+      delta = 0.5
+
+      call get_one_way_wind(vlong,vlati,vvx,vvy,vvz,vu1,vu2,alpha,u0)
+      call get_testcase_h(csh,SphR,delta)
+
+c     Test 3: div(v) = 0
+      call rone (tmp_v,npts)
+
+      call CS_cem_div_skew_sym(div_out,w1,w2,Vu1,Vu2,tmp_v,CS_Jac)
+
+      linf_div = glamax(div_out,npts)
+
+      if(nid.eq.0) write(*,*)'Lcheck div test(div=0), amax div= '
+     $                       ,linf_div
+
+C     Test 4: div(vh)
+      do i=1,npts
+        ex_div(i)    = -2.0*u0*SphR*sn_long(i)/delta**2 * csh(i)
+        ex_div(i)    =  ex_div(i) * cs_lati(i)
+      enddo
+      call CS_cem_div(div_out2,w1,w2,Vu1,Vu2,csh,CS_Jac)
+
+      call sub3(div_err,ex_div,div_out2,npts)
+
+      linf_div = glamax(div_err,npts)
+
+      if(nid.eq.0) write(*,*)
+     $   'Lcheck div test(cos*div=exact) (alpha=0): Linf err=',linf_div
+
+c      Test Grid
+cC     print coordinates
+c        write(*,*)'Lan, check diff mat'
+c        write(*,*)'format, i,j,ie,(x,y,z)'
+c      do ie = 1,nelt
+c      do j = 1,ny1
+c      do i = 1,nx1
+c        write(*,*)i,j,ie,xm1(i,j,1,ie),ym1(i,j,1,ie),zm1(i,j,1,ie)
+c      enddo
+c      write(*,*)'===================================================='
+c      enddo
+c      enddo
+
+ 133  format(2i3,i2,3f23.15)
+
+      return
+      end
+c-----------------------------------------------------------------------
+c     This routine construct the coordinates, jcaobian of CS
       subroutine construct_cubespheregrid
 c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'TOTAL'
-c      include 'POISSON'
       include 'CUBESPHERE'
 
-      common /my_output/ div_out (lx1*ly1*lz1*lelt)
-     $               ,   div_out1(lx1*ly1*lz1*lelt)
-     $               ,   div_out2(lx1*ly1*lz1*lelt)
-     $               ,   CS_w1   (lx1*ly1*lz1*lelt)
-     $               ,   CS_w2   (lx1*ly1*lz1*lelt)
-     $               ,   CS2_w1  (lx1*ly1*lz1*lelt)
-     $               ,   CS2_w2  (lx1*ly1*lz1*lelt)
-     $               ,   ex_div (lx1*ly1*lz1*lelt)
-   
       integer i,j,k,l,ie,ieg
-      integer mx,my,mz
       integer ierr,NEL,iglsum
-      real rscale,ex_div
+      real xx,yy,zz,rr,arg1,arg2
       real xmin,ymin,zmin,xmax,ymax,zmax
-      real xx,yy,zz,rr
-      real FaceNum, xshift, yshift
+      real xshift,yshift
       real glsum,glmax,glmin,glamax
-      real tmp_dsdx(4)
-      real CS_Jacdx
-      real surf_area
-      real tmp  (lx1*ly1*lz1*lelt)
-      real tmp_f(lx1*ly1*lz1*lelt)
-      real CS_xtmp,CS_ytmp,CS_rtmp
-      real CubeSphXtmp,CubeSphYtmp,CubeSphZtmp
-      real V_lati_tmp,V_long_tmp
-      real CS_u_0,CS_delta
-      real alpha_0,sn_alpha0,cs_alpha0
       real CS_Atmp
-      real arg1,arg2
-      real dx1v
-      real div_out,div_out1,CS_w1,CS_w2
-      real div_out2,CS2_w1,CS2_w2
-     $   , tmp_v   (lx1*ly1*lz1*lelt)
-     $   , test_long(lx1*ly1*lz1*lelt)
-     $   , test_lati(lx1*ly1*lz1*lelt)
-     $   , test_u1(lx1*ly1*lz1*lelt)
-     $   , test_u2(lx1*ly1*lz1*lelt)
-     $   , tmp_div(lx1*ly1*lz1*lelt)
-      real amax_w1,amax_w2,amax_div
-      real amax2_w1,amax2_w2,amax2_div
-      real tmp_result
-      real tmp_result2
-      real tmpc1,tmpc2
-      real eps
+      real tmp_dsdx(4),Jacdx,dx1v
 
       real NpoleX,NpoleY,NpoleZ
       real SpoleX,SpoleY,SpoleZ
-      real tt_dist1,tt_dist2
-
-C     LLLLLLLLL
+      real dist1,dist2
 
       nxyz = nx1*ny1*nz1
       npts = nxyz*nelt
@@ -410,78 +473,79 @@ c     compute equal angular alpha and beta
         enddo
       enddo
 
-c     compute spherical coordinate
-      BigR = param(3) ! Lan, tmp, radius of sphere
-      CubeLength = BigR/sqrt(3.0)
-      if (nid.eq.0) write(6,*)'Lcheck SphR = ',BigR
+
+c     compute coordinate on sphere
+      SphR = param(3) ! Lan, tmp, radius of sphere
+      CubeLength = SphR/sqrt(3.0)
+      if (nid.eq.0) write(6,*)'Lcheck SphR = ',SphR
       if (nid.eq.0) write(6,*)'Lcheck CubeLength = ',CubeLength
 
       do ie = 1,nelt
         if (if_in_region(ie).eq.1) then
           do j = 1,nxyz
             i = j + (ie-1)*nxyz
-            CS_xtmp = CubeLength * tan(EqAngAlph(i))
-            CS_ytmp = CubeLength * tan(EqAngBeta(i))
-            CS_rtmp = sqrt(
-     $                CubeLength**2 + CS_xtmp**2 + CS_ytmp**2)
-            CubeSphX(i) =  BigR * CubeLength / CS_rtmp
-            CubeSphY(i) =  BigR * CS_xtmp / CS_rtmp
-            CubeSphZ(i) =  BigR * CS_ytmp / CS_rtmp
+            xx = CubeLength * tan(EqAngAlph(i))
+            yy = CubeLength * tan(EqAngBeta(i))
+            rr = sqrt(
+     $                CubeLength**2 + xx**2 + yy**2)
+            CubeSphX(i) =  SphR * CubeLength / rr
+            CubeSphY(i) =  SphR * xx / rr
+            CubeSphZ(i) =  SphR * yy / rr
           enddo
         elseif (if_in_region(ie).eq.2) then
           do j = 1,nxyz
             i = j + (ie-1)*nxyz
-            CS_xtmp = CubeLength * tan(EqAngAlph(i))
-            CS_ytmp = CubeLength * tan(EqAngBeta(i))
-            CS_rtmp = sqrt(
-     $                CubeLength**2 + CS_xtmp**2 + CS_ytmp**2)
-            CubeSphX(i) = -BigR * CS_xtmp / CS_rtmp
-            CubeSphY(i) =  BigR * CubeLength / CS_rtmp
-            CubeSphZ(i) =  BigR * CS_ytmp / CS_rtmp
+            xx = CubeLength * tan(EqAngAlph(i))
+            yy = CubeLength * tan(EqAngBeta(i))
+            rr = sqrt(
+     $                CubeLength**2 + xx**2 + yy**2)
+            CubeSphX(i) = -SphR * xx / rr
+            CubeSphY(i) =  SphR * CubeLength / rr
+            CubeSphZ(i) =  SphR * yy / rr
           enddo
         elseif (if_in_region(ie).eq.3) then
           do j = 1,nxyz
             i = j + (ie-1)*nxyz
-            CS_xtmp = CubeLength * tan(EqAngAlph(i))
-            CS_ytmp = CubeLength * tan(EqAngBeta(i))
-            CS_rtmp = sqrt(
-     $                CubeLength**2 + CS_xtmp**2 + CS_ytmp**2)
-            CubeSphX(i) = -BigR * CS_xtmp / CS_rtmp
-            CubeSphY(i) = -BigR * CS_ytmp / CS_rtmp
-            CubeSphZ(i) =  BigR * CubeLength / CS_rtmp
+            xx = CubeLength * tan(EqAngAlph(i))
+            yy = CubeLength * tan(EqAngBeta(i))
+            rr = sqrt(
+     $                CubeLength**2 + xx**2 + yy**2)
+            CubeSphX(i) = -SphR * xx / rr
+            CubeSphY(i) = -SphR * yy / rr
+            CubeSphZ(i) =  SphR * CubeLength / rr
           enddo
         elseif (if_in_region(ie).eq.4) then
           do j = 1,nxyz
             i = j + (ie-1)*nxyz
-            CS_xtmp = CubeLength * tan(EqAngAlph(i))
-            CS_ytmp = CubeLength * tan(EqAngBeta(i))
-            CS_rtmp = sqrt(
-     $                CubeLength**2 + CS_xtmp**2 + CS_ytmp**2)
-            CubeSphX(i) = -BigR * CubeLength / CS_rtmp
-            CubeSphY(i) = -BigR * CS_ytmp / CS_rtmp
-            CubeSphZ(i) = -BigR * CS_xtmp / CS_rtmp
+            xx = CubeLength * tan(EqAngAlph(i))
+            yy = CubeLength * tan(EqAngBeta(i))
+            rr = sqrt(
+     $                CubeLength**2 + xx**2 + yy**2)
+            CubeSphX(i) = -SphR * CubeLength / rr
+            CubeSphY(i) = -SphR * yy / rr
+            CubeSphZ(i) = -SphR * xx / rr
           enddo
         elseif (if_in_region(ie).eq.5) then
           do j = 1,nxyz
             i = j + (ie-1)*nxyz
-            CS_xtmp = CubeLength * tan(EqAngAlph(i))
-            CS_ytmp = CubeLength * tan(EqAngBeta(i))
-            CS_rtmp = sqrt(
-     $                CubeLength**2 + CS_xtmp**2 + CS_ytmp**2)
-            CubeSphX(i) =  BigR * CS_ytmp / CS_rtmp
-            CubeSphY(i) = -BigR * CubeLength / CS_rtmp
-            CubeSphZ(i) = -BigR * CS_xtmp / CS_rtmp
+            xx = CubeLength * tan(EqAngAlph(i))
+            yy = CubeLength * tan(EqAngBeta(i))
+            rr = sqrt(
+     $                CubeLength**2 + xx**2 + yy**2)
+            CubeSphX(i) =  SphR * yy / rr
+            CubeSphY(i) = -SphR * CubeLength / rr
+            CubeSphZ(i) = -SphR * xx / rr
           enddo
         elseif (if_in_region(ie).eq.6) then
           do j = 1,nxyz
             i = j + (ie-1)*nxyz
-            CS_xtmp = CubeLength * tan(EqAngAlph(i))
-            CS_ytmp = CubeLength * tan(EqAngBeta(i))
-            CS_rtmp = sqrt(
-     $                CubeLength**2 + CS_xtmp**2 + CS_ytmp**2)
-            CubeSphX(i) =  BigR * CS_ytmp / CS_rtmp
-            CubeSphY(i) =  BigR * CS_xtmp / CS_rtmp
-            CubeSphZ(i) = -BigR * CubeLength / CS_rtmp
+            xx = CubeLength * tan(EqAngAlph(i))
+            yy = CubeLength * tan(EqAngBeta(i))
+            rr = sqrt(
+     $                CubeLength**2 + xx**2 + yy**2)
+            CubeSphX(i) =  SphR * yy / rr
+            CubeSphY(i) =  SphR * xx / rr
+            CubeSphZ(i) = -SphR * CubeLength / rr
           enddo
         else
           if(nid.eq.0)write(*,*)'Lan, error in if_in_region3'
@@ -496,16 +560,13 @@ c     compute spherical coordinate
       call copy(ymn,CubeSphY,npts)
       call copy(zmn,CubeSphZ,npts)
 
-      eps = 1E-12
-
 c     longitudes and latitudes
       do i = 1,npts
-        CubeSphXtmp = CubeSphX(i)
-        CubeSphYtmp = CubeSphY(i)
-        CubeSphZtmp = CubeSphZ(i)
-        long(i) = atan2(CubeSphYtmp, CubeSphXtmp)
-        lati(i) = atan2(CubeSphZtmp,
-     $     sqrt(CubeSphXtmp**2  + CubeSphYtmp**2))
+        xx = CubeSphX(i)
+        yy = CubeSphY(i)
+        zz = CubeSphZ(i)
+        long(i) = atan2(yy,xx)
+        lati(i) = atan2(zz,sqrt(xx**2+yy**2))
         sn_long(i) = sin(long(i))
         cs_long(i) = cos(long(i))
         sn_lati(i) = sin(lati(i))
@@ -524,8 +585,8 @@ c        xx = CubeSphX(i)
 c        yy = CubeSphY(i)
 c        zz = CubeSphZ(i)
 c
-c        tt_dist1 = abs(zz-NpoleZ)
-c        tt_dist2 = abs(zz-SpoleZ)
+c        dist1 = abs(zz-NpoleZ)
+c        dist2 = abs(zz-SpoleZ)
 c
 c        if (tt_dist1.lt.1E-6) then 
 c          write(*,*)'Lan, find a N-pole',
@@ -538,7 +599,6 @@ c        endif
 c      enddo
 
 
-
 c     A matrix
       do ie = 1,nelt
         if ( if_in_region(ie) .eq. 1 ) then
@@ -546,13 +606,13 @@ c     A matrix
             i = j + nxyz*(ie-1)
             arg1 = EqAngAlph(i)
             arg2 = EqAngBeta(i)
-            CS_A_11(i) =  BigR 
+            CS_A_11(i) =  SphR 
      $         * cs_long(i)**2 * cs_lati(i) / cos(arg1)**2
             CS_A_12(i) =  0.0
-            CS_A_21(i) = -BigR 
+            CS_A_21(i) = -SphR 
      $         * sn_long(i) * cs_long(i)
      $         * sn_lati(i) * cs_lati(i)    / cos(arg1)**2
-            CS_A_22(i) =  BigR 
+            CS_A_22(i) =  SphR 
      $         * cs_long(i) * cs_lati(i)**2 / cos(arg2)**2
           enddo
         elseif ( if_in_region(ie) .eq. 2 ) then
@@ -560,13 +620,13 @@ c     A matrix
             i = j + nxyz*(ie-1)
             arg1 = EqAngAlph(i)
             arg2 = EqAngBeta(i)
-            CS_A_11(i) = BigR 
+            CS_A_11(i) = SphR 
      $         * sn_long(i)**2 * cs_lati(i) / cos(arg1)**2
             CS_A_12(i) =  0.0
-            CS_A_21(i) = BigR 
+            CS_A_21(i) = SphR 
      $         * sn_long(i) * cs_long(i) 
      $         * sn_lati(i) * cs_lati(i)    / cos(arg1)**2
-            CS_A_22(i) = BigR 
+            CS_A_22(i) = SphR 
      $         * sn_long(i) * cs_lati(i)**2 / cos(arg2)**2
             enddo
         elseif ( if_in_region(ie) .eq. 3 ) then
@@ -574,13 +634,13 @@ c     A matrix
             i = j + nxyz*(ie-1)
             arg1 = EqAngAlph(i)
             arg2 = EqAngBeta(i)
-            CS_A_11(i) =  BigR
+            CS_A_11(i) =  SphR
      $         * sn_long(i) * sn_lati(i)    / cos(arg1)**2
-            CS_A_12(i) = -BigR 
+            CS_A_12(i) = -SphR 
      $         * cs_long(i) * sn_lati(i)    / cos(arg2)**2
-            CS_A_21(i) =  BigR 
+            CS_A_21(i) =  SphR 
      $         * cs_long(i) * sn_lati(i)**2 / cos(arg1)**2
-            CS_A_22(i) = BigR 
+            CS_A_22(i) = SphR 
      $         * sn_long(i) * sn_lati(i)**2 / cos(arg2)**2
           enddo
         elseif ( if_in_region(ie) .eq. 4 ) then
@@ -589,11 +649,11 @@ c     A matrix
             arg1 = EqAngAlph(i)
             arg2 = EqAngBeta(i)
             CS_A_11(i) =  0.0
-            CS_A_12(i) =  BigR
+            CS_A_12(i) =  SphR
      $          * cs_long(i)**2* cs_lati(i) / cos(arg2)**2
-            CS_A_21(i) = BigR 
+            CS_A_21(i) = SphR 
      $         * cs_long(i) * cs_lati(i)**2 / cos(arg1)**2
-            CS_A_22(i) = -BigR 
+            CS_A_22(i) = -SphR 
      $         * sn_long(i) * cs_long(i)
      $         * sn_lati(i) * cs_lati(i)    / cos(arg2)**2
           enddo
@@ -603,11 +663,11 @@ c     A matrix
             arg1 = EqAngAlph(i)
             arg2 = EqAngBeta(i)
             CS_A_11(i) =  0.0
-            CS_A_12(i) = BigR 
+            CS_A_12(i) = SphR 
      $         * sn_long(i)**2 * cs_lati(i) / cos(arg2)**2
-            CS_A_21(i) = BigR 
+            CS_A_21(i) = SphR 
      $         * sn_long(i) * cs_lati(i)**2 / cos(arg1)**2
-            CS_A_22(i) = BigR 
+            CS_A_22(i) = SphR 
      $         * sn_long(i) * cs_long(i)
      $         * sn_lati(i) * cs_lati(i)    / cos(arg2)**2
             enddo
@@ -616,13 +676,13 @@ c     A matrix
             i = j + nxyz*(ie-1)
             arg1 = EqAngAlph(i)
             arg2 = EqAngBeta(i)
-            CS_A_11(i) = -BigR
+            CS_A_11(i) = -SphR
      $         * cs_long(i) * sn_lati(i)    / cos(arg1)**2
-            CS_A_12(i) = BigR
+            CS_A_12(i) = SphR
      $         * sn_long(i) * sn_lati(i)    / cos(arg2)**2
-            CS_A_21(i) = BigR 
+            CS_A_21(i) = SphR 
      $         * sn_long(i) * sn_lati(i)**2 / cos(arg1)**2
-            CS_A_22(i) = BigR 
+            CS_A_22(i) = SphR 
      $         * cs_long(i) * sn_lati(i)**2 / cos(arg2)**2
           enddo
         endif
@@ -638,7 +698,7 @@ c     Compute inv(A) and Jacobian
          CS_ainv22(i) =  CS_A_11(i)/CS_Atmp
 
          CS_Jac(i,1,1,1) = abs(CS_Atmp)
-c         CS_Jac(i,1,1,1) = BigR**2 / cos(arg1)**2 / cos(arg2)**2
+c         CS_Jac(i,1,1,1) = SphR**2 / cos(arg1)**2 / cos(arg2)**2
 c     $      / ( 1.0 + tan(arg1)**2 + tan(arg2)**2 )**1.5
       enddo
 
@@ -659,123 +719,96 @@ C     Test and replace d(rst)/d(xyz)
       if (nid.eq.0) write(*,*)'Lan>> Jac new: jacm,jacm1'
      $             ,jacm(1),jacm1(1,1,1,1)
 
-c     Check surface area
-      surf_area = glsum(bmn,npts)
-      if (nid.eq.0) write(*,*)'Lcheck surf area=',surf_area,
-     $                        'exact: 4piR=',4.0*pi*BigR**2
-c     Check integral: int (x-1)**2 + yy**2 + zz**2 dS = 4*pi*R^2*(R^2+1)
-      do i=1,npts
-        xx = CubeSphX (i)
-        yy = CubeSphY (i)
-        zz = CubeSphZ (i)
-        tmp_f(i) = (xx-1.0)**2 + yy**2 + zz**2
-      enddo
-      call col3(tmp,tmp_f,bmn,npts)
-      tmp_result = glsum(tmp,npts)
-      if (nid.eq.0) then
-        write(*,*)'Lcheck>> ==========================================='
-        write(*,*)'Lcheck>> [An execise:'
-        write(*,*)'Lcheck>> [ int (x-1)**2 + yy**2 + zz**2 dS'
-        write(*,*)'Lcheck>> [ the numerical integral is',tmp_result
-        write(*,*)'Lcheck>> [   ans:   4*pi*R^2(R^2+1)='
-     $            ,4.0*pi*BigR**2*(BigR**2+1.0)
-        write(*,*)'Lcheck>> ==========================================='
-      endif
 
 C     Test and replace d(rst)/d(xyz), ToDo: replace later by Lan
       nel = iglsum(nelt,1)
       dx1v = (pi/sqrt(nel/6.0))/2.0
-      CS_Jacdx = dx1v/2
+      Jacdx = dx1v/2
       tmp_dsdx(1) = glmax(rxm1,npts)
       tmp_dsdx(2) = glmax(rym1,npts)
       tmp_dsdx(3) = glmax(sxm1,npts)
       tmp_dsdx(4) = glmax(sym1,npts)
       if(nid.eq.0) then
-        write(*,*)'Lan>> Jacdx = dx1v/2 = ',CS_Jacdx
+        write(*,*)'Lan>> Jacdx = dx1v/2 = ',Jacdx
         write(*,*)'Lan>> test dsdx 11/max',rxm1(1,1,1,1),tmp_dsdx(1)
         write(*,*)'Lan>> test dsdx 12/max',rym1(1,1,1,1),tmp_dsdx(2)
         write(*,*)'Lan>> test dsdx 21/max',sxm1(1,1,1,1),tmp_dsdx(3)
         write(*,*)'Lan>> test dsdx 22/max',sym1(1,1,1,1),tmp_dsdx(4)
       endif
 
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine get_one_way_wind(vlong,vlati,vvx,vvy,vvz
+     $                           ,vu1,vu2,alpha,u0)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CUBESPHERE'
+
+      real vlong(lpts1)! v on geo-coordinate
+     $   , vlati(lpts1)
+     $   , vu1(lpts1)  ! v on EqAng
+     $   , vu2(lpts1)
+     $   , vvx(lpts1)  ! v on XYZ
+     $   , vvy(lpts1)
+     $   , vvz(lpts1)
+
+      real alpha       ! angle of v between N-S axis
+     $   , u0          ! max speed
+
+
+      real sn_alpha,cs_alpha
+      real arg1,arg2
+
+      integer i
 
 c     wind field vectors
-      CS_u_0 = 2.0*pi*BigR  ! check if needed divided by time
-c      CS_u_0 = 1.0  ! check if needed divided by time
-      alpha_0 = -pi/4
-      CS_delta = 0.5
-      cs_alpha0 = cos(alpha_0)
-      sn_alpha0 = sin(alpha_0)
+      cs_alpha = cos(alpha)
+      sn_alpha = sin(alpha)
       do i = 1,npts
          arg1 = EqAngAlph(i)
          arg2 = EqAngBeta(i)
 
-C        compute V_long V_lati, checked, Lan
-         CS_V_long(i) = CS_u_0 * (cs_alpha0 *cs_lati(i)
-     $      + sn_alpha0 * cs_long(i) * sn_lati(i))
-         CS_V_lati(i) = -CS_u_0 * sn_alpha0 *sn_long(i)
-            V_long_tmp = CS_V_long(i)
-            V_lati_tmp = CS_V_lati(i)
-         CS_V_abs(i) = sqrt(V_long_tmp**2 + V_lati_tmp**2)
+C        compute V_long V_lati
+         vlong(i) = u0 
+     $            *(cs_alpha * cs_lati(i)
+     $            + sn_alpha * cs_long(i) * sn_lati(i) )
+         vlati(i) = -u0 * sn_alpha * sn_long(i)
 
-         CS_V_X(i) = -V_long_tmp * sn_long(i)
-     $               -V_lati_tmp * sn_lati(i) * cs_long(i)
-         CS_V_Y(i) =  V_long_tmp * cs_long(i)
-     $               -V_lati_tmp * sn_lati(i) * sn_long(i)
-         CS_V_Z(i) =  V_lati_tmp * cs_lati(i)
+         vvx(i) = -vlong(i) * sn_long(i)
+     $            -vlati(i) * sn_lati(i) * cs_long(i)
+         vvy(i) =  vlong(i) * cs_long(i)
+     $            -vlati(i) * sn_lati(i) * sn_long(i)
+         vvz(i) =  vlati(i) * cs_lati(i)
 
-         CS_V_u1(i) = CS_ainv11(i) * CS_V_long(i)
-     $              + CS_ainv12(i) * CS_V_lati(i)
-         CS_V_u2(i) = CS_ainv21(i) * CS_V_long(i)
-     $              + CS_ainv22(i) * CS_V_lati(i)
-
-         CS_h(i)  = exp( -2.0*BigR**2/CS_delta**2
-     $                  *(1-cs_lati(i)*cs_long(i)))
+         vu1(i) = CS_ainv11(i) * vlong(i)
+     $          + CS_ainv12(i) * vlati(i)
+         vu2(i) = CS_ainv21(i) * vlong(i)
+     $          + CS_ainv22(i) * vlati(i)
       enddo
 
-C     Test div
-      call rone (tmp_v,npts)
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine get_testcase_h(csh,R,delta)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CUBESPHERE'
 
-      call CS_cem_div_skew_sym(div_out,CS_w1,CS_w2,
-     $                         CS_V_u1,CS_V_u2,tmp_v,CS_Jac)
+      real csh(lpts1)
+      real R, delta
+      integer i
 
-      amax_div = glamax(div_out,npts)
-      amax_w1  = glamax(CS_w1,npts)
-      amax_w2  = glamax(CS_w2,npts)
+      npts = nx1*ny1*nz1*nelt
 
-      if(nid.eq.0) write(*,*)'Lcheck div test(div=0), amax div= '
-     $                       ,amax_div
-
-C     Test div 2
-      do i=1,npts
-        ex_div(i)    = -CS_u_0*2.0*sn_long(i)*BigR/CS_delta**2 * CS_h(i)
-        ex_div(i)    =  ex_div(i)*cs_lati(i)
+      do i = 1,npts
+         csh(i)  = exp( -2.0*R**2/delta**2
+     $                *(1-cs_lati(i)*cs_long(i)) )
       enddo
-      call CS_cem_div(div_out2,CS2_w1,CS2_w2
-     $               ,CS_V_u1,CS_V_u2,CS_h,CS_Jac)
-
-      call sub3(tmp_div,ex_div,div_out2,npts)
-
-      amax2_div = glamax(tmp_div,npts)
-      amax2_w1  = glamax(div_out2,npts)
-      amax2_w2  = glamax(ex_div,npts)
-
-      if(nid.eq.0) write(*,*)
-     $   'Lcheck div test(cos*div=exact) (alpha=0): Linf err=',amax2_div
-
-cC     print coordinates
-c        write(*,*)'Lan, check diff mat'
-c        write(*,*)'format, i,j,ie,(x,y,z)'
-c      do ie = 1,nelt
-c      do j = 1,ny1
-c      do i = 1,nx1
-c        write(*,*)i,j,ie,xm1(i,j,1,ie),ym1(i,j,1,ie),zm1(i,j,1,ie)
-c      enddo
-c      write(*,*)'===================================================='
-c      enddo
-c      enddo
-
- 133  format(2i3,i2,3f23.15)
 
       return
       end
