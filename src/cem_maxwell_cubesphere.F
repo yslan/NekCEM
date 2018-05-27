@@ -5,7 +5,7 @@ c-----------------------------------------------------------------------
       include 'SIZE'
       include 'TOTAL'
       include 'RK5' ! rk time
-      include 'CUBESPHERE' ! rk time
+c      include 'CUBESPHERE'
 
       common /scrns/ srflx(6*2*ldim*lx1*lz1*lelt) !ToDo: only need 1*2*ldim*nxyfl,Lan
       real srflx
@@ -43,6 +43,8 @@ c-----------------------------------------------------------------------
       include 'SIZE'
       include 'TOTAL'
       include 'CUBESPHERE'
+      include 'CUBESPHEREGRID' ! CS_Jac
+
       real w0(lx1*ly1*lz1*lelt)
       real w1(lx1*ly1*lz1*lelt)
       real w2(lx1*ly1*lz1*lelt)
@@ -75,7 +77,7 @@ c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'TOTAL'
-      include 'CUBESPHERE'
+c      include 'CUBESPHERE'
       real srflx(6*2*ldim*lx1*lz1*lelt)
 
       if (ldim.eq.3) then

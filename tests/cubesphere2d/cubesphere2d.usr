@@ -21,7 +21,8 @@ c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'TOTAL'
-      include 'CUBESPHERE' ! ToDo: use local variables, Lan
+      include 'CUBESPHERE'
+      include 'CUBESPHEREGRID'
 
       real tt
       real hx(lpts),hy(lpts),hz(lpts)
@@ -50,6 +51,7 @@ c-----------------------------------------------------------------------
       include 'TOTAL'
       include 'EMWAVE'
       include 'CUBESPHERE'
+      include 'CUBESPHEREGRID'
 
       real tt
       real solhx(lpts),solhy(lpts),solhz(lpts)
@@ -278,7 +280,8 @@ c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'TOTAL'
-      include 'CUBESPHERE'
+c      include 'CUBESPHERE'
+      include 'CUBESPHEREGRID'
 
       real xx,yy,zz
       real glsum,glamax
@@ -384,7 +387,8 @@ c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'TOTAL'
-      include 'CUBESPHERE'
+c      include 'CUBESPHERE'
+      include 'CUBESPHEREGRID'
 
       integer i,j,k,l,ie,ieg
       integer ierr,NEL,iglsum
@@ -746,6 +750,7 @@ c-----------------------------------------------------------------------
       include 'SIZE'
       include 'TOTAL'
       include 'CUBESPHERE'
+      include 'CUBESPHEREGRID'
 
       real vlong(lpts1)! v on geo-coordinate
      $   , vlati(lpts1)
@@ -797,7 +802,7 @@ c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'TOTAL'
-      include 'CUBESPHERE'
+      include 'CUBESPHEREGRID'
 
       real csh(lpts1)
       real R, delta

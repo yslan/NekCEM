@@ -21,36 +21,3 @@ c=====================================================================
       common /cs_advectionp/
      $     CS_pen                 ! penalty
       real CS_pen
-
-      common /cubespheregrid/
-     $     CubeLength,            ! a, length of cude is 2a
-     $     EqAngAlph (lpts1),     ! equal angular alpha
-     $     EqAngBeta (lpts1),     ! equal angular beta
-     $     CubeSphX  (lpts1),     ! X, Cartesian coordinates on sphere
-     $     CubeSphY  (lpts1),     ! Y, Cartesian coordinates on sphere
-     $     CubeSphZ  (lpts1),     ! Z, Cartesian coordinates on sphere
-     $     SphR,                  ! R, geographic coordinate system
-     $     long (lpts1),          ! longitude, geographic coordinate system 
-     $     lati (lpts1),          ! latitude, geographic coordinate system 
-     $     sn_long (lpts1),        ! sin(longitude)
-     $     cs_long (lpts1),        ! cos(longitude)
-     $     sn_lati (lpts1),        ! sin(latitude)
-     $     cs_lati (lpts1)         ! cos(latitude)
-      real CubeLength,EqAngAlph,EqAngBeta
-      real CubeSphX,CubeSphY,CubeSphZ
-      real SphR,long,lati
-      real sn_long,cs_long,sn_lati,cs_lati
-
-      common /cs_transform/
-     $     CS_A_11 (lpts1),       ! A matrix
-     $     CS_A_12 (lpts1),
-     $     CS_A_21 (lpts1),
-     $     CS_A_22 (lpts1),
-     $     CS_ainv11 (lpts1),     ! inv(A)
-     $     CS_ainv12 (lpts1),
-     $     CS_ainv21 (lpts1),
-     $     CS_ainv22 (lpts1),
-     $     CS_Jac (lx1,ly1,lz1,lelt) ! Jacobian from cube to sphere
-      real CS_A_11,CS_A_12,CS_A_21,CS_A_22
-      real CS_ainv11,CS_ainv12,CS_ainv21,CS_ainv22
-      real CS_Jac
