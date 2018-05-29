@@ -482,7 +482,6 @@ c
       integer i
       
       call Usub2sup(CS_V_ub1,CS_V_ub2,CS_V_u1,CS_V_u2)
-c     Compute Curl
 
 c     Compute Energy      
       call col3(ub1u1,CS_V_ub1,CS_V_u1)
@@ -493,8 +492,9 @@ c     Compute Energy
       enddo
 
 c     Compute Source term
+      call CS_cem_curl(w0,w1,w2,CS_V_ub1,CS_V_ub2,EqAngJac)
       do i = 1,npts
-         vort(i) = CS_Coriolis(i) + CS_zeta(i)
+         vort(i) = CS_Coriolis(i) + w0(i)
       enddo
       
       call col4(CS_S1,CS_Jac,CS_V_u2,vort)
