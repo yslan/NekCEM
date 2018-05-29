@@ -192,6 +192,42 @@ c     kHX=rk4a(i)*kHX
       return
       end
 c-----------------------------------------------------------------------
+      subroutine rk_CS_SWE_ab(ii)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CUBESPHERE'
+      include 'RK5'
+      real     ca,cb
+      integer  ii
+      real*8 dclock
+      real   stime0
+
+      stime0=dclock()
+
+c     kHX=rk4a(i)*kHX
+      ca = rk4a(ii) ! 
+      cb = rk4b(ii)
+
+      call rk4_upd(CS_h,CS_kh,resCS_h,cb,ca,dt,npts) ! kh = ca*kh + dt*resCS
+                                                   !  h =     h + cb*kh 
+      call rk4_upd(CS_V_ub1,CS_kub1,resCS_ub1,cb,ca,dt,npts)
+      call rk4_upd(CS_V_ub2,CS_kub2,resCS_ub2,cb,ca,dt,npts)
+
+      stime0=dclock()-stime0
+
+#ifdef TIMER
+      if     (istep.le.10.or.mod(istep,iocomm).eq.0) then
+         if (nid.eq.0) then
+            write(6,*) 'rk_CS_SWE_ab                (sec)::',stime0
+         endif
+      endif
+#endif
+
+      return
+      end
+c-----------------------------------------------------------------------
 C     The below subroutines compute the customize operaters for cube sphere
 C     include:    
 C        - partial derivative
@@ -432,8 +468,6 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
-
-c-----------------------------------------------------------------------
       subroutine CS_SWE_op
 c-----------------------------------------------------------------------
       implicit none
@@ -461,8 +495,6 @@ c     $                    resen(1,1),resen(1,2),resen(1,3))
       return
       end
 c-----------------------------------------------------------------------
-      
-c-----------------------------------------------------------------------
       subroutine CS_SWE
 c-----------------------------------------------------------------------
       implicit none
@@ -477,63 +509,55 @@ c-----------------------------------------------------------------------
       real w2(lx1*ly1*lz1*lelt)
       real ub1u1(lx1*ly1*lz1*lelt)
       real ub2u2(lx1*ly1*lz1*lelt)
-      real vort(lx1*ly1*lz1*lelt)
+      real vort(lx1*ly1*lz1*lelt)  ! vorticity
 c
       integer i
-      
-      call Usub2sup(CS_V_ub1,CS_V_ub2,CS_V_u1,CS_V_u2)
 
-c     Compute Energy      
+C     Eq. Advection: dh/dt = resCS_h = -div(V*h)
+      call Usub2sup(CS_V_ub1,CS_V_ub2,CS_V_u1,CS_V_u2)
+      call CS_cem_div(w0,w1,w2,CS_V_u1,CS_V_u2,CS_h,CS_Jac)
+      call cmult2(resCS_h,w0,-1.0,npts) ! resCS_h = -w0
+
+
+C     Eq. 2-3
+c     Compute Energy
       call col3(ub1u1,CS_V_ub1,CS_V_u1,npts)
       call col3(ub2u2,CS_V_ub2,CS_V_u2,npts)
       do i = 1 , npts
-         CS_E(i) = gravity*(CS_h(i)+CS_hs(i)) 
-     $           + 0.5*(ub1u1(i)+ub2u2(i))
+         CS_E(i) = gravity*(CS_h(i)+CS_hs(i))  ! potential
+     $           + 0.5*(ub1u1(i)+ub2u2(i))     ! kinetic
       enddo
 
-c     Compute Source term
+      call CS_cem_Jgrad(w1,w2,CS_E)!  J*grad(E)=(w1,w2)=(dE/dx1,dE/dx2)
+
+c     Compute Source terms
       call CS_cem_curl(w0,w1,w2,CS_V_ub1,CS_V_ub2,CS_Jac)
-      do i = 1,npts
-         vort(i) = CS_Coriolis(i) + w0(i)
-      enddo
-      
+      call add3(vort,CS_Coriolis,w0,npts) ! vort = Coriolis + curl(V)
+
       call col4(CS_S1,CS_Jac,CS_V_u2,vort,npts)
       call col4(CS_S2,CS_Jac,CS_V_u1,vort,npts)
-      call chsign(CS_S2,npts)
 
-      
-      call CS_SWE_sym(w0,w1,w2,CS_h,CS_E,
-     $                CS_V_ub1,CS_V_ub2,CS_V_u1,CS_V_u2,
-     $                CS_S1,CS_S2,CS_Jac)
+C     Compute res
+      call add3s2(resCS_ub1,w1,CS_S1,-1.0, 1.0,npts) ! res_ub1 = -dE/dx1+S1
+      call add3s2(resCS_ub2,w2,CS_S2,-1.0,-1.0,npts) ! res_ub2 = -dE/dx2-S2
 
-c     resCS_h   = dh/dt   (volume)
-c     resCS_ub1 = dub1/dt (volume)      
-c     resCS_ub2 = dub2/dt (volume)      
-      call copy(resCS_h,w0,npts)
-      call copy(resCS_ub1,w1,npts)
-      call copy(resCS_ub2,w2,npts)
-      
-c     check resCS_h, resCS_ub1, resCS_ub2
+
+c     Temporory output to check res, ToDo: remove later, by Lan
       call copy(EN(1,1),resCS_h,npts)
       call copy(EN(1,2),resCS_ub1,npts)
-      call copy(EN(1,3),resCS_ub2,npts)      
+      call copy(EN(1,3),resCS_ub2,npts)
 
       return
       end
 c-----------------------------------------------------------------------
-      
+      subroutine CS_cem_Jgrad(w1,w2,h)
 c-----------------------------------------------------------------------
-      subroutine CS_SWE_sym(w0,w1,w2,h,Energy,ub1,ub2,u1,u2,
-     $                      s1,s2,EqAngJac)
-c-----------------------------------------------------------------------
-c     div: w = 1/J d/dx (J u1 h) + 1/J d/dy (J u2 h)
-c     In this mode, w1 and w2 does not important, ToDo: remove w1 w2, Lan
+c     w1 = dh/dx1, w2 = dh/dx2
       implicit none
       include 'SIZE'
       include 'TOTAL'
 
-      real w0(1),w1(1),w2(1),w3(1),u1(1),u2(1),u3(1),h(1),EqAngJac(1)
-      real Energy(1),ub1(1),ub2(1),s1(1),s2(1)
+      real w1(1),w2(1),w3(1),EqAngJac(1),h(1)
       integer e,i,j,k,nn
 
       common /div3d/ ur1(lx1*ly1*lz1),us1(lx1*ly1*lz1),ut1(lx1*ly1*lz1)
@@ -546,19 +570,16 @@ c
       if (if3d) then ! Lan, for now only have 2D
 
       else
-         call CS_cem_div(w0,w1,w2,u1,u2,h,EqAngJac)
-         call chsign(w0,npts)
 
-         call chsign(Energy,npts)
          do e = 1,nelt
             j = nxyz*(e-1)
-            call CS_local_dxi1(ur1,Energy,nn,e,dxm1) ! ur1=dxm1*E
-            call CS_local_dxi2(us2,Energy,nn,e,dxtm1) ! us2=E*dxtm1
+            call CS_local_dxi1(ur1,h,nn,e,dxm1)  ! ur1=dxm1*h
+            call CS_local_dxi2(us2,h,nn,e,dxtm1) ! us2=h*dxtm1
             
             do i = 1,nxyz
                k = i + nxyz*(e-1)
-               w1(k) = ur1(i)/rxm1(k,1,1,1) + s1(k)
-               w2(k) = us2(i)/sym1(k,1,1,1) + s2(k)
+               w1(k) = ur1(i)/rxm1(k,1,1,1)
+               w2(k) = us2(i)/sym1(k,1,1,1)
             enddo
          enddo
          
