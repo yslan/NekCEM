@@ -333,6 +333,45 @@ c
       return
       end
 c-----------------------------------------------------------------------
+      subroutine CS_cem_curl(w0,w1,w2,ub1,ub2,EqAngJac)
+c-----------------------------------------------------------------------
+c     curvilinear curl:
+c        ik*curl(V) = 1/Jac * d(ub2)/dx1 - d(ub1)/dx2
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CUBESPHEREGRID'
+
+      real w0(1),w1(1),w2(1),w3(1),ub1(1),ub2(1),EqAngJac(1)
+      integer e,i,j,k,nn
+
+      real dub2dx1(lx1*ly1*lz1)
+      real dub1dx2(lx1*ly1*lz1)
+
+      nn = nx1-1
+c
+      if (if3d) then ! Lan, for now only have 2D
+
+      else
+
+         do e = 1,nelt
+           j = nxyz*(e-1)
+           call CS_local_dxi1(dub2dx1,ub2,nn,e,dxm1) ! dub2dx1=dxm1*ub2
+           call CS_local_dxi2(dub1dx2,ub1,nn,e,dxtm1)! dub1dx2=ub1*dxtm1
+
+           do i = 1,nxyz
+             k = i + nxyz*(e-1)
+             w1(k) = dub2dx1(i)/rxm1(k,1,1,1)
+             w2(k) = dub1dx2(i)/sym1(k,1,1,1)
+
+             w0(k) = (w1(k)-w2(k))/EqAngJac(k)
+           enddo
+         enddo
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
       subroutine Usph2sub(ulong,ulati,ub1,ub2)
 c-----------------------------------------------------------------------
       implicit none
