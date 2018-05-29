@@ -21,3 +21,22 @@ c=====================================================================
       common /cs_advectionp/
      $     CS_pen                 ! penalty
       real CS_pen
+
+      common /cs_shallow/
+     $     CS_V_ub1    (lpts1),
+     $     CS_V_ub2    (lpts1),
+     $     CS_E        (lpts1),
+     $     CS_K        (lpts1),
+     $     CS_zeta     (lpts1), 
+     $     CS_Coriolis (lpts1),
+     $     CS_S1       (lpts1),
+     $     CS_S2       (lpts1)
+      real CS_V_ub1    
+      real CS_V_ub2    
+      real CS_E        
+      real CS_K        
+      real CS_zeta      
+      real CS_Coriolis
+      real CS_S1
+      real CS_S2
+      
