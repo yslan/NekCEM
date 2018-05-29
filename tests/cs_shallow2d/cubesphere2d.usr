@@ -28,15 +28,33 @@ c-----------------------------------------------------------------------
       real hx(lpts),hy(lpts),hz(lpts)
       real ex(lpts),ey(lpts),ez(lpts)
       real u0,alpha,delta
+      real omega,grav_g
+      real gh0,gh
+      integer i
 
 c     Compute ini field
-      u0 = 2.0*pi*SphR
+      u0 = 2.0*pi*SphR/12.0/86400.0
       alpha = -pi/4.0
       delta = 0.5
+      grav_g= 9.80616   ! gravitational constant
+      omega = 7.292E-5
+      gh0   = 2.94E4
+      
 
+c     Get u,v
       call get_one_way_wind(CS_V_long,CS_V_lati,CS_V_X,CS_V_Y,CS_V_Z
      $                     ,CS_V_u1,CS_V_u2,alpha,u0)
-      call get_testcase_h(CS_h,SphR,delta)
+
+c     Get h
+c      call get_testcase_h(CS_h,SphR,delta)
+      do i=1,npts
+        gh = gh0 - u0/2. * (2.0*SphR*omega + u0)
+        CS_h(i) = ( sn_lati(i)*cos(alpha) 
+     $             -cs_long(i)*cs_lati(i)*sin(alpha) )**2.0
+     $            *gh/grav_g
+      enddo
+
+
 
 c     output step 0
       call usersol(tt,hx,hy,hz,ex,ey,ez)
@@ -302,6 +320,13 @@ c      include 'CUBESPHERE'
       real div_err(lpts1),ex_div(lpts1)
       real linf_div
 
+      real tmp_t5(lpts1)
+      real t51_up1(lpts1),t51_up2(lpts1)
+      real t52_up1(lpts1),t52_up2(lpts1)
+      real t52_ub1(lpts1),t52_ub2(lpts1)
+      real tmp_t51(lpts1),tmp_t52(lpts1)
+      real err_t5_11,err_t5_12
+
       integer i,j,k,ie
 
       npts = nx1*ny1*nz1*nelt
@@ -377,6 +402,22 @@ c      enddo
 c      enddo
 
  133  format(2i3,i2,3f23.15)
+
+
+c     Test 5: Usph2sup
+      call Usph2sup(vlong,vlati,t51_up1,t51_up2)
+
+      call Usph2sub(vlong,vlati,t52_ub1,t52_ub2)
+      call Usub2sup(t52_ub1,t52_ub2,t52_up1,t52_up2)
+
+      call sub3(tmp_t51,t51_up1,t52_up1)
+      call sub3(tmp_t52,t51_up2,t52_up2)
+
+      err_t5_11 = glamax(tmp_t51,npts)
+      err_t5_12 = glamax(tmp_t52,npts)
+
+      if (nid.eq.0) write(*,*)
+     $    'Lcheck sph2sub, err_up1',err_t5_11,'err_up2',err_t5_12
 
       return
       end
@@ -704,6 +745,16 @@ c     Compute inv(A) and Jacobian
          CS_Jac(i,1,1,1) = abs(CS_Atmp)
 c         CS_Jac(i,1,1,1) = SphR**2 / cos(arg1)**2 / cos(arg2)**2
 c     $      / ( 1.0 + tan(arg1)**2 + tan(arg2)**2 )**1.5
+      enddo
+
+c     Compute inv(G)
+      do i=1,npts  ! inv(A)*inv(A^T)
+        CS_ginv11(i) = CS_ainv11(i)**2 + CS_ainv12(i)**2
+        CS_ginv12(i) = CS_ainv11(i)*CS_ainv21(i)
+     $               + CS_ainv12(i)*CS_ainv22(i)
+
+        CS_ginv21(i) = CS_ginv12(i)                        ! symmetric
+        CS_ginv22(i) = CS_ainv21(i)**2 + CS_ainv22(i)**2
       enddo
 
 C     Test and replace d(rst)/d(xyz)

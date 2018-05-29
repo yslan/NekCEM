@@ -29,7 +29,12 @@ c=====================================================================
      $     CS_ainv12 (lpts1),
      $     CS_ainv21 (lpts1),
      $     CS_ainv22 (lpts1),
-     $     CS_Jac (lx1,ly1,lz1,lelt) ! Jacobian from cube to sphere
+     $     CS_Jac (lx1,ly1,lz1,lelt), ! Jacobian from cube to sphere
+     $     CS_ginv11 (lpts1),     ! inv(G) = inv(A)*inv(A^T)
+     $     CS_ginv12 (lpts1),
+     $     CS_ginv21 (lpts1),
+     $     CS_ginv22 (lpts1)
       real CS_A_11,CS_A_12,CS_A_21,CS_A_22
       real CS_ainv11,CS_ainv12,CS_ainv21,CS_ainv22
       real CS_Jac
+      real CS_ginv11,CS_ginv12,CS_ginv21,CS_ginv22
