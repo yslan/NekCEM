@@ -2,8 +2,9 @@ c=====================================================================
 c   Main Variables for Advection Eq. Solver on Cubed Sphere
 c=====================================================================
       common /cs_advectionv/
-     $     CS_h (lpts1),          ! scaler h field
-     $     resCS (lpts1),         ! res of h
+     $     CS_h (lpts1),        ! scaler h field
+     $     resCS(lpts1),          ! res of h (TODO: remote it)
+     $     resCS_h (lpts1),       ! res of h
      $     CS_kh (lpts1),         ! RK step for h
      $     CS_V_abs (lpts1),      ! magnitude of wind fields
      $     CS_V_X (lpts1),        ! wind field on Cartesian coordinates
@@ -13,7 +14,7 @@ c=====================================================================
      $     CS_V_lati (lpts1),     !    (geographic coordinate system) 
      $     CS_V_u1 (lpts1),       ! wind field on EqAngular coordinates
      $     CS_V_u2 (lpts1)        !
-      real CS_h,resCS,CS_kh
+      real CS_h,resCS,resCS_h,CS_kh
       real CS_V_X,CS_V_Y,CS_V_Z,CS_V_abs
       real CS_V_long,CS_V_lati
       real CS_V_u1,CS_V_u2
@@ -23,6 +24,9 @@ c=====================================================================
       real CS_pen
 
       common /cs_shallow/
+     $     CS_hs       (lpts1),
+     $     resCS_ub1   (lpts1),     ! res of ub1
+     $     resCS_ub2   (lpts1),     ! res of ub2    
      $     CS_V_ub1    (lpts1),
      $     CS_V_ub2    (lpts1),
      $     CS_E        (lpts1),
@@ -31,6 +35,9 @@ c=====================================================================
      $     CS_Coriolis (lpts1),
      $     CS_S1       (lpts1),
      $     CS_S2       (lpts1)
+      real CS_hs
+      real resCS_ub1
+      real resCS_ub2
       real CS_V_ub1    
       real CS_V_ub2    
       real CS_E        
@@ -39,4 +46,8 @@ c=====================================================================
       real CS_Coriolis
       real CS_S1
       real CS_S2
-      
+
+
+      common /cs_EarthPara/
+     $     gravity
+      real gravity

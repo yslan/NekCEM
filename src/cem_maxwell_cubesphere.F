@@ -393,3 +393,107 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
+
+c-----------------------------------------------------------------------
+      subroutine CS_SWE
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CUBESPHERE'
+      include 'CUBESPHEREGRID'  ! CS_Jac
+
+      real w0(lx1*ly1*lz1*lelt)
+      real w1(lx1*ly1*lz1*lelt)
+      real w2(lx1*ly1*lz1*lelt)
+      real ub1u1(lx1*ly1*lz1*lelt)
+      real ub2u2(lx1*ly1*lz1*lelt)
+      real vort(lx1*ly1*lz1*lelt)
+c
+      integer i
+      
+      call Usub2sup(CS_V_ub1,CS_V_ub2,CS_V_u1,CS_V_u2)
+      
+c     Compute Energy      
+      call col3(ub1u1,CS_V_ub1,CS_V_u1)
+      call col3(ub2u2,CS_V_ub2,CS_V_u2)
+      do i = 1 , npts
+         CS_E(i) = gravity*(CS_h(i)+CS_hs(i)) 
+     $           + 0.5*(ub1u1(i)+ub2u2(i))
+      enddo
+
+c     Compute Source term
+      do i = 1,npts
+         vort(i) = CS_Coriolis(i) + CS_zeta(i)
+      enddo
+      
+      call col4(CS_S1,CS_Jac,CS_V_u2,vort)
+      call col4(CS_S2,CS_Jac,CS_V_u1,vort)
+      call chsign(CS_S2,npts)
+
+      
+c$$$  call CS_cem_div_skew_sym(w0,w1,w2,CS_V_u1,CS_V_u2,CS_h,CS_Jac)
+
+      call CS_SWE_sym(w0,w1,w2,CS_h,CS_E,
+     $                CS_V_ub1,CS_V_ub2,CS_V_u1,CS_V_u2,
+     $                CS_S1,CS_S2,CS_Jac)
+
+c     resCS_h   = dh/dt   (volume)
+c     resCS_ub1 = dub1/dt (volume)      
+c     resCS_ub2 = dub2/dt (volume)      
+      call copy(resCS_h,w0,npts)
+      call copy(resCS_ub1,w1,npts)
+      call copy(resCS_ub2,w2,npts)
+      
+
+
+      return
+      end
+c-----------------------------------------------------------------------
+      
+c-----------------------------------------------------------------------
+      subroutine CS_SWE_sym(w0,w1,w2,h,Energy,ub1,ub2,u1,u2,
+     $                      s1,s2,EqAngJac)
+c-----------------------------------------------------------------------
+c     div: w = 1/J d/dx (J u1 h) + 1/J d/dy (J u2 h)
+c     In this mode, w1 and w2 does not important, ToDo: remove w1 w2, Lan
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+
+      real w0(1),w1(1),w2(1),w3(1),u1(1),u2(1),u3(1),h(1),EqAngJac(1)
+      real Energy(1),ub1(1),ub2(1),s1(1),s2(1)
+      integer e,i,j,k,nn
+
+      common /div3d/ ur1(lx1*ly1*lz1),us1(lx1*ly1*lz1),ut1(lx1*ly1*lz1)
+     $             , ur2(lx1*ly1*lz1),us2(lx1*ly1*lz1),ut2(lx1*ly1*lz1)
+     $             , ur3(lx1*ly1*lz1),us3(lx1*ly1*lz1),ut3(lx1*ly1*lz1)
+      real ur1,us1,ut1,ur2,us2,ut2,ur3,us3,ut3
+
+      nn = nx1-1
+c
+      if (if3d) then ! Lan, for now only have 2D
+
+      else
+         call CS_cem_div(w0,w1,w2,u1,u2,h,EqAngJac)
+         call chsign(w0,npts)
+
+         call chsign(Energy,npts)
+         do e = 1,nelt
+            j = nxyz*(e-1)
+            call CS_local_dxi1(ur1,Energy,nn,e,dxm1) ! ur1=dxm1*E
+            call CS_local_dxi2(us2,Energy,nn,e,dxtm1) ! us2=E*dxtm1
+            
+            do i = 1,nxyz
+               k = i + nxyz*(e-1)
+               w1(k) = ur1(i)/rxm1(k,1,1,1) + s1(k)
+               w2(k) = us2(i)/sym1(k,1,1,1) + s2(k)
+            enddo
+         enddo
+         
+      endif
+      
+      return
+      end
+c-----------------------------------------------------------------------
+      
