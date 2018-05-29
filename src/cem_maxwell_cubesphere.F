@@ -429,6 +429,7 @@ c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'TOTAL'
+      include 'EMWAVE'          ! for output some field
       include 'CUBESPHERE'
       include 'CUBESPHEREGRID'  ! CS_Jac
 
@@ -476,7 +477,7 @@ c     resCS_ub2 = dub2/dt (volume)
 c     check resCS_h, resCS_ub1, resCS_ub2
       call copy(EN(1,1),resCS_h,npts)
       call copy(EN(1,2),resCS_ub1,npts)
-      call copy(EN(1,3),resCS_bu2,npts)      
+      call copy(EN(1,3),resCS_ub2,npts)      
 
       return
       end
