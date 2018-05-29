@@ -446,14 +446,14 @@ c      include 'CUBESPHERE'
       real srflx
 
       call CS_SWE  ! << cem_maxwell
-      call CS_adv_restrict_to_face ! cem_maxwell_add_flux_to_res ! not work
+cc      call CS_adv_restrict_to_face ! cem_maxwell_add_flux_to_res ! not work
 
 c      call userinc(rktime,fhn(1,1),fhn(1,2),fhn(1,3),
 c     $                    fen(1,1),fen(1,2),fen(1,3)) ! ToDO: change variables, Lan
 
-      call CS_adv_flux(srflx)  ! << cem_maxwell_flux
+cc      call CS_adv_flux(srflx)  ! << cem_maxwell_flux
 
-      call CS_adv_add_flux_to_res(srflx) ! << cem_maxwell_add_flux_to_res
+cc      call CS_adv_add_flux_to_res(srflx) ! << cem_maxwell_add_flux_to_res
 
 c      call usersrc(rktime,reshn(1,1),reshn(1,2),reshn(1,3), ! ToDO: change variable name, Lan
 c     $                    resen(1,1),resen(1,2),resen(1,3))
@@ -484,21 +484,21 @@ c
       call Usub2sup(CS_V_ub1,CS_V_ub2,CS_V_u1,CS_V_u2)
 
 c     Compute Energy      
-      call col3(ub1u1,CS_V_ub1,CS_V_u1)
-      call col3(ub2u2,CS_V_ub2,CS_V_u2)
+      call col3(ub1u1,CS_V_ub1,CS_V_u1,npts)
+      call col3(ub2u2,CS_V_ub2,CS_V_u2,npts)
       do i = 1 , npts
          CS_E(i) = gravity*(CS_h(i)+CS_hs(i)) 
      $           + 0.5*(ub1u1(i)+ub2u2(i))
       enddo
 
 c     Compute Source term
-      call CS_cem_curl(w0,w1,w2,CS_V_ub1,CS_V_ub2,EqAngJac)
+      call CS_cem_curl(w0,w1,w2,CS_V_ub1,CS_V_ub2,CS_Jac)
       do i = 1,npts
          vort(i) = CS_Coriolis(i) + w0(i)
       enddo
       
-      call col4(CS_S1,CS_Jac,CS_V_u2,vort)
-      call col4(CS_S2,CS_Jac,CS_V_u1,vort)
+      call col4(CS_S1,CS_Jac,CS_V_u2,vort,npts)
+      call col4(CS_S2,CS_Jac,CS_V_u1,vort,npts)
       call chsign(CS_S2,npts)
 
       
