@@ -46,12 +46,15 @@ c     Get u,v
      $                     ,CS_V_u1,CS_V_u2,alpha,u0)
 
 c     Get h
-c      call get_testcase_h(CS_h,SphR,delta)
+c     call get_testcase_h(CS_h,SphR,delta)
       do i=1,npts
         gh = gh0 - u0/2. * (2.0*SphR*omega + u0)
         CS_h(i) = ( sn_lati(i)*cos(alpha) 
      $             -cs_long(i)*cs_lati(i)*sin(alpha) )**2.0
      $            *gh/grav_g
+      enddo
+      do i=1,npts
+        CS_hs(i) = 0.0
       enddo
 
 

@@ -395,6 +395,35 @@ c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
 
 c-----------------------------------------------------------------------
+      subroutine CS_SWE_op
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'RK5' ! rk time
+c      include 'CUBESPHERE'
+
+      common /scrns/ srflx(6*2*ldim*lx1*lz1*lelt) !ToDo: only need 1*2*ldim*nxyfl,Lan
+      real srflx
+
+      call CS_SWE  ! << cem_maxwell
+      call CS_adv_restrict_to_face ! cem_maxwell_add_flux_to_res ! not work
+
+c      call userinc(rktime,fhn(1,1),fhn(1,2),fhn(1,3),
+c     $                    fen(1,1),fen(1,2),fen(1,3)) ! ToDO: change variables, Lan
+
+      call CS_adv_flux(srflx)  ! << cem_maxwell_flux
+
+      call CS_adv_add_flux_to_res(srflx) ! << cem_maxwell_add_flux_to_res
+
+c      call usersrc(rktime,reshn(1,1),reshn(1,2),reshn(1,3), ! ToDO: change variable name, Lan
+c     $                    resen(1,1),resen(1,2),resen(1,3))
+
+      return
+      end
+c-----------------------------------------------------------------------
+      
+c-----------------------------------------------------------------------
       subroutine CS_SWE
 c-----------------------------------------------------------------------
       implicit none
@@ -413,7 +442,8 @@ c
       integer i
       
       call Usub2sup(CS_V_ub1,CS_V_ub2,CS_V_u1,CS_V_u2)
-      
+c     Compute Curl
+
 c     Compute Energy      
       call col3(ub1u1,CS_V_ub1,CS_V_u1)
       call col3(ub2u2,CS_V_ub2,CS_V_u2)
@@ -432,8 +462,6 @@ c     Compute Source term
       call chsign(CS_S2,npts)
 
       
-c$$$  call CS_cem_div_skew_sym(w0,w1,w2,CS_V_u1,CS_V_u2,CS_h,CS_Jac)
-
       call CS_SWE_sym(w0,w1,w2,CS_h,CS_E,
      $                CS_V_ub1,CS_V_ub2,CS_V_u1,CS_V_u2,
      $                CS_S1,CS_S2,CS_Jac)
@@ -445,7 +473,10 @@ c     resCS_ub2 = dub2/dt (volume)
       call copy(resCS_ub1,w1,npts)
       call copy(resCS_ub2,w2,npts)
       
-
+c     check resCS_h, resCS_ub1, resCS_ub2
+      call copy(EN(1,1),resCS_h,npts)
+      call copy(EN(1,2),resCS_ub1,npts)
+      call copy(EN(1,3),resCS_bu2,npts)      
 
       return
       end
