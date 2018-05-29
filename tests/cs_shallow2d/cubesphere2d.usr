@@ -327,6 +327,15 @@ c      include 'CUBESPHERE'
       real tmp_t51(lpts1),tmp_t52(lpts1)
       real err_t5_11,err_t5_12
 
+      real t6_ub1(lpts1)
+      real t6_ub2(lpts1)
+      real t6_w0(lpts1)
+      real t6_w1(lpts1)
+      real t6_w2(lpts1)
+      real t6_ex(lpts1)
+      real t6_tmp(lpts1)
+      real t6_err
+
       integer i,j,k,ie
 
       npts = nx1*ny1*nz1*nelt
@@ -405,6 +414,9 @@ c      enddo
 
 
 c     Test 5: Usph2sup
+      u0 = 2*pi*SphR
+      alpha = 0.0
+
       call Usph2sup(vlong,vlati,t51_up1,t51_up2)
 
       call Usph2sub(vlong,vlati,t52_ub1,t52_ub2)
@@ -418,6 +430,20 @@ c     Test 5: Usph2sup
 
       if (nid.eq.0) write(*,*)
      $    'Lcheck sph2sub, err_up1',err_t5_11,'err_up2',err_t5_12
+
+
+c     Test 6: test curl
+      call Usph2sub(vlong,vlati,t6_ub1,t6_ub2)
+      call CS_cem_curl(t6_w0,t6_w1,t6_w2,t6_ub1,t6_ub2,CS_Jac)
+
+      do i=1,npts
+        t6_ex(i) = 2.0*u0*sn_lati(i)/SphR
+      enddo
+
+      call sub3(t6_tmp,t6_ex,t6_w0,npts)
+      t6_err = glamax(t6_tmp,npts)
+
+      if(nid.eq.0) write(*,*)'Lcheck curl test, err=',t6_err
 
       return
       end
