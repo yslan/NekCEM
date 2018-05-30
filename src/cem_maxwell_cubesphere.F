@@ -427,6 +427,25 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
+      subroutine Usub2sph(ub1,ub2,ulong,ulati)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CUBESPHEREGRID'
+
+      real ulong(lpts1),ulati(lpts1)
+      real ub1(lpts1),ub2(lpts1)
+      integer i
+
+      do i=1,npts  ! u_sph = inv(A^T) * u_sub
+        ulong(i) = CS_ainv11(i)*ub1(i) + CS_ainv21(i)*ub2(i)
+        ulati(i) = CS_ainv12(i)*ub1(i) + CS_ainv22(i)*ub2(i)
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
       subroutine Usph2sup(ulong,ulati,up1,up2)
 c-----------------------------------------------------------------------
       implicit none
@@ -446,8 +465,48 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
+      subroutine Usup2sph(up1,up2,ulong,ulati)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CUBESPHEREGRID'
+
+      real ulong(lpts1),ulati(lpts1)
+      real up1(lpts1),up2(lpts1)
+      integer i
+
+      do i=1,npts
+        ulong(i) = CS_A_11(i)*up1(i) + CS_A_12(i)*up2(i)
+        ulati(i) = CS_A_21(i)*up1(i) + CS_A_22(i)*up2(i)
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
 c     input: ubi    output: upi
-      subroutine Usub2sup(up1,up2,ub1,ub2)
+      subroutine Usub2sup(ub1,ub2,up1,up2)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CUBESPHEREGRID'
+
+      real ub1(lpts1),ub2(lpts1)
+      real up1(lpts1),up2(lpts1)
+
+      integer i
+
+      do i=1,npts
+        up1(i) = CS_ginv11(i)*ub1(i) + CS_ginv12(i)*ub2(i)
+        up2(i) = CS_ginv21(i)*ub1(i) + CS_ginv22(i)*ub2(i)
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+c     input: upi    output: ubi
+      subroutine Usup2sub(up1,up2,ub1,ub2)
 c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
@@ -460,9 +519,14 @@ c-----------------------------------------------------------------------
 
       integer i
 
-      do i=1,npts
-        up1(i) = CS_ginv11(i)*ub1(i) + CS_ginv12(i)*ub2(i)
-        up2(i) = CS_ginv21(i)*ub1(i) + CS_ginv22(i)*ub2(i)
+      do i=1,npts    ! u_sub = G * u_sup
+        g11 = CS_A_11(i)**2 + CS_A_21(i)**2
+        g12 = CS_A_11(i)*CS_A_12(i) + CS_A_21(i)*CS_A_22(i)
+        g21 = g12
+        g22 = CS_A_12(i)**2 + CS_A_22(i)**2
+
+        ub1(i) = g11*up1(i) + g12*up2(i)
+        ub2(i) = g21*up1(i) + g22*up2(i)
       enddo
 
       return
