@@ -567,4 +567,230 @@ c
       return
       end
 c-----------------------------------------------------------------------
+      subroutine CS_SWE_flux(srflx)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+c      include 'CUBESPHERE'
+      real srflx(3*2*ldim*lx1*lz1*lelt)
+
+      if (ldim.eq.3) then
+         write(*,*)'CS only support 2D problem'
+         call exitt
+      else
+         call CS_SWE_flux2d(srflx) ! << cem_maxwell_flux
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine CS_SWE_flux2d(srflx)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'GEOM'
+      include 'INPUT'
+      include 'TOPOL'
+      include 'TSTEP'
+      include 'PARALLEL'
+      include 'RK5'
+      include 'CUBESPHERE'
+
+     
+      real dclock,t0
+      real srflx(3*2*ldim*lx1*lz1*lelt)
+      real C0,Y0,Y1,Z0,Z1,fu1,fu2,fu3,fw1,fw2,fw3
+      integer i,j,k,e,f
+      real tmp_flx(3*2*ldim*nx1*nz1*lelt) ! tmp
+      real out_flx(3*2*ldim*nx1*nz1*lelt) ! global
+
+      real tmp
+c     an
+      real v_long(lx1*ly1*lz1*lelt)
+      real v_lati(lx1*ly1*lz1*lelt)
+      real tmpv1(lx1*ly1*lz1*lelt)
+      real tmpv2(lx1*ly1*lz1*lelt)
+      real srf_v(2*2*ldim*lx1*lz1*lelt)
       
+      real srfp_ub1(2*ldim*lx1*lz1*lelt)
+      real srfp_ub2(2*ldim*lx1*lz1*lelt)
+      real srfp_u1(2*ldim*lx1*lz1*lelt)
+      real srfp_u2(2*ldim*lx1*lz1*lelt)
+      real srfp_jh(2*ldim*lx1*lz1*lelt)
+
+      real srfm_ub1(2*ldim*lx1*lz1*lelt)
+      real srfm_ub2(2*ldim*lx1*lz1*lelt)
+      real srfm_u1(2*ldim*lx1*lz1*lelt)
+      real srfm_u2(2*ldim*lx1*lz1*lelt)
+      real srfm_jh(2*ldim*lx1*lz1*lelt)
+
+      
+      CS_pen = (nx1-1)*nx1*0.5 * 2.0 ! if using 1.0, h begins going to negative
+
+      nxzfl = nx1*nz1*nelt*2*ndim
+      k = nxzfl
+
+      do i = 1,nxzfl
+         j = cemface(i)
+         srfm_ub1(i)   = CS_V_ub1(j)
+      enddo
+      do i = 1,nxzfl
+         j = cemface(i)
+         srfm_ub2(i)   = CS_V_ub2(j)
+      enddo
+      do i = 1,nxzfl
+         j = cemface(i)
+         srfm_u1(i)   = CS_V_u1(j)
+      enddo
+      do i = 1,nxzfl
+         j = cemface(i)
+         srfm_u2(i)   = CS_V_u2(j)
+      enddo      
+
+C     Compute: out_flx = v^+
+      call Usub2sph_srf(srfm_ub1,srfm_ub2,v_long,v_lati)
+      f = 0
+      do i = 1,nxzfl
+         j = cemface(i)
+         srf_v(f*k+i)   = v_long(i)
+         tmp_flx(f*k+i) = srf_v(f*k+i) 
+      enddo
+      f = 1
+      do i = 1,nxzfl
+         j = cemface(i)
+         srf_v(f*k+i)   = v_lati(i)
+         tmp_flx(f*k+i) = srf_v(f*k+i)          
+      enddo
+      call gs_op_fields(gsh_face,srf_v,nxzfl,2,1,1,0)   ! srf_v   = v^- + v^+
+      call add3s2(out_flx,tmp_flx,srf_v,-1.0,1.0,nxzfl) ! out_flx = -tmp_flx + srf_v
+      f = 0
+      do i = 1,nxzfl
+         j = cemface(i)
+         v_long(i) = out_flx(f*k+i)
+      enddo
+      f = 1
+      do i = 1,nxzfl
+         j = cemface(i)
+         v_lati(i) = out_flx(f*k+i)
+      enddo
+      
+      call Usph2sub_srf(v_long,v_lati,srfp_ub1,srfp_ub2)
+      call Usph2sup_srf(v_long,v_lati,srfp_u1,srfp_u2)
+
+C     Compute: srfp_h = h^+ 
+      do i = 1,nxzfl
+        j = cemface(i) ! volume index
+        tmp_flx(i) = CS_h(j)
+        srfm_h(i)  = tmp_flx(i)
+      enddo
+      call gs_op_fields(gsh_face,tmp_flx,nxzfl,1,1,1,0)   ! tmp_flx = h^- + h^+
+      call add3s2(srfp_h,srfm_h,tmp_flx,-1.0,1.0,nxzfl) ! srfp_h = - srfm_h + tmp_flx
+
+C     Compute: srfm_e = e^-
+      do i = 1,nxzfl
+        j = cemface(i) ! volume index
+        srfm_e(i) = CS_e(j)
+      enddo
+C     Compute: srfp_e = e^+
+      do i = 1,nxzfl
+         j = cemface(i)
+         srfp_e(i) = gravity( srfp_h(i)-CS_hs(j) )
+     $             + 0.5*( srfp_u1(i)*srfp_ub1(i)
+     $                   + srfp_u2(i)*srfp_ub2(i))
+      enddo      
+
+c$$$      t0 = dclock()
+c$$$      call gs_op_fields(gsh_face,srflx,nxzfl,3,1,1,0)   ! srflx = q^- + q^+
+c$$$      call measure_comm(t0)
+c$$$      call add3s2(out_flx,tmp_flx,srflx,-1.0,0.5,nxzfl) ! out_flx = -1*tmp_flx + 0.5*srflx
+
+C     Compute:
+      f = 0
+      do i = 1,nxzfl
+         j = cemface(i)         ! volume index
+         alpha = alpha_F1*abs(unxm(i)) + alpha_F2*abs(unym(i))
+         srflx(f*k+i) = -0.5 * CS_Jac(j) * (
+     $        ( srfm_h(i) * ( srfm_u1(i)*unxm(i) + srfm_u2(i)*unym(i)
+     $                       + alpha ))
+     $       -( srfp_h(i) * ( srfp_u1(i)*unxm(i) + srfp_u2(i)*unym(i) 
+     $                       + alpha ))    )
+      enddo
+      f = 1
+      do i = 1,nxzfl
+         srflx(f*k+i) = -0.5*(
+     $        ( srfm_e(i)*unxm(i) + alpha_F1*srfm_ub1*abs(unxm(i)) )
+     $       -( srfp_e(i)*unxm(i) + alpha_F1*srfp_ub1*abs(unxm(i)) ))
+      enddo
+      f = 2
+      do i = 1,nxzfl
+         srflx(f*k+i) = -0.5*(
+     $        ( srfm_e(i)*unym(i) + alpha_F2*srfm_ub2*abs(unym(i)) )
+     $       -( srfp_e(i)*unym(i) + alpha_F2*srfp_ub2*abs(unym(i)) ))
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine CS_SWE_flux2d_test(srflx)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'GEOM'
+      include 'INPUT'
+      include 'TOPOL'
+      include 'TSTEP'
+      include 'PARALLEL'
+      include 'RK5'
+      include 'CUBESPHERE'
+
+      real dclock,t0
+      real srflx(3*2*ldim*lx1*lz1*lelt)
+      real C0,Y0,Y1,Z0,Z1,fu1,fu2,fu3,fw1,fw2,fw3
+      integer i,j,k,e,f
+      real tmp_flx(3*2*ldim*nx1*nz1*lelt) ! tmp
+      real out_flx(3*2*ldim*nx1*nz1*lelt) ! global
+
+      real tmp
+
+      CS_pen = (nx1-1)*nx1*0.5 * 2.0 ! if using 1.0, h begins going to negative
+
+      nxzfl = nx1*nz1*nelt*2*ndim
+
+C     Compute: out_flx = (h^- - h^+)
+      k = nxzfl
+      f = 0
+      do i = 1,nxzfl
+        j = cemface(i) ! volume index
+        srflx(f*k+i)   = CS_Jac(j)*CS_h(j)*CS_V_u1(j)*unxm(j)
+     $                 + CS_Jac(j)*CS_h(j)*CS_V_u2(j)*unym(j)
+     $                 - alpha_F*CS_Jac(j)*CS_h(j)
+        tmp_flx(f*k+i) = srflx(f*k+i)
+      enddo
+      f = 1
+      do i = 1,nxzfl
+        j = cemface(i) ! volume index
+        srflx(f*k+i)   = CS_E(j)*unxm(j)
+     $                 - alpha_F*CS_V_ub1(j)
+        tmp_flx(f*k+i) = srflx(f*k+i)
+      enddo
+      f = 2
+      do i = 1,nxzfl
+        j = cemface(i) ! volume index
+        srflx(f*k+i)   = CS_E(j)*unym(j)
+     $                 - alpha_F*CS_V_ub2(j)        
+        tmp_flx(i)     = srflx(f*k+i) 
+      enddo
+
+      t0 = dclock()
+      call gs_op_fields(gsh_face,srflx,nxzfl,3,1,1,0)   ! srflx = q^- + q^+
+      call measure_comm(t0)
+
+      call add3s2(out_flx,tmp_flx,srflx,-1.0,0.5,nxzfl) ! out_flx = -1*tmp_flx + 0.5*srflx
+
+C     Compute:
+      call copy(out_flx,srflx,nxzfl*3)
+
+      return
+      end
+c-----------------------------------------------------------------------
