@@ -346,7 +346,8 @@ c      if (iffilter) call q_filter(0.01)
          call rk_c(rkstep)
 c     call CS_adv_op ! << cem_maxwell_op
          call CS_SWE_op
-         call rk_CS_adv_ab(rkstep) ! << rk_maxwell_ab
+c         call rk_CS_adv_ab(rkstep) ! << rk_maxwell_ab
+         call rk_CS_SWE_ab(rkstep) ! << rk_maxwell_ab
       enddo
 
       

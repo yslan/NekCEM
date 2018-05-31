@@ -3,7 +3,7 @@ c   Main Variables for Advection Eq. Solver on Cubed Sphere
 c=====================================================================
       common /cs_advectionv/
      $     CS_h (lpts1),        ! scaler h field
-     $     resCS(lpts1),          ! res of h (TODO: remote it)
+     $     resCS(lpts1),          ! res of h (TODO: remove it)
      $     resCS_h (lpts1),       ! res of h
      $     CS_kh (lpts1),         ! RK step for h
      $     CS_V_abs (lpts1),      ! magnitude of wind fields
@@ -24,20 +24,24 @@ c=====================================================================
       real CS_pen
 
       common /cs_shallow/
-     $     CS_hs       (lpts1),
+     $     CS_V_ub1    (lpts1),     ! var in Eq 2
+     $     CS_V_ub2    (lpts1),     ! var in Eq 3
      $     resCS_ub1   (lpts1),     ! res of ub1
      $     resCS_ub2   (lpts1),     ! res of ub2    
-     $     CS_V_ub1    (lpts1),
-     $     CS_V_ub2    (lpts1),
-     $     CS_E        (lpts1),
-     $     CS_K        (lpts1),
-     $     CS_zeta     (lpts1), 
-     $     CS_Coriolis (lpts1),
-     $     CS_S1       (lpts1),
+     $     CS_kub1     (lpts1),     ! RK step for ub1
+     $     CS_kub2     (lpts1),     ! RK step for ub2    
+     $     CS_E        (lpts1),     ! Energy
+     $     CS_K        (lpts1),     ! (un-used, by Lan)
+     $     CS_zeta     (lpts1),     ! curl(V)*khat
+     $     CS_Coriolis (lpts1),     ! Coriolis force
+     $     CS_hs       (lpts1),     ! surface height (mountain)
+     $     CS_S1       (lpts1),     ! source term, ToDo: put into local, by Lan
      $     CS_S2       (lpts1)
       real CS_hs
       real resCS_ub1
       real resCS_ub2
+      real CS_kub1
+      real CS_kub2
       real CS_V_ub1    
       real CS_V_ub2    
       real CS_E        

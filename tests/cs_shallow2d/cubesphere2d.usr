@@ -339,6 +339,27 @@ c      include 'CUBESPHERE'
       real t6_tmp(lpts1)
       real t6_err
 
+c     Test 7: test U sph -> sub -> sup -> sph  and sph > sup > sub >sph
+      real t71_ub1(lpts1)
+      real t71_ub2(lpts1)
+      real t71_up1(lpts1)
+      real t71_up2(lpts1)
+      real t71_long(lpts1)
+      real t71_lati(lpts1)
+      real t71_tmp1(lpts1)
+      real t71_tmp2(lpts1)
+      real t71_err1,t71_err2
+
+      real t72_ub1(lpts1)
+      real t72_ub2(lpts1)
+      real t72_up1(lpts1)
+      real t72_up2(lpts1)
+      real t72_long(lpts1)
+      real t72_lati(lpts1)
+      real t72_tmp1(lpts1)
+      real t72_tmp2(lpts1)
+      real t72_err1,t72_err2
+
       integer i,j,k,ie
 
       npts = nx1*ny1*nz1*nelt
@@ -425,8 +446,8 @@ c     Test 5: Usph2sup
       call Usph2sub(vlong,vlati,t52_ub1,t52_ub2)
       call Usub2sup(t52_ub1,t52_ub2,t52_up1,t52_up2)
 
-      call sub3(tmp_t51,t51_up1,t52_up1)
-      call sub3(tmp_t52,t51_up2,t52_up2)
+      call sub3(tmp_t51,t51_up1,t52_up1,npts)
+      call sub3(tmp_t52,t51_up2,t52_up2,npts)
 
       err_t5_11 = glamax(tmp_t51,npts)
       err_t5_12 = glamax(tmp_t52,npts)
@@ -447,6 +468,32 @@ c     Test 6: test curl
       t6_err = glamax(t6_tmp,npts)
 
       if(nid.eq.0) write(*,*)'Lcheck curl test, err=',t6_err
+
+
+c     Test 7: test U sph -> sub -> sup -> sph  and sph > sup > sub >sph
+      call Usph2sub(vlong,vlati,t71_ub1,t71_ub2)
+      call Usub2sup(t71_ub1,t71_ub2,t71_up1,t71_up2)
+      call Usup2sph(t71_up1,t71_up2,t71_long,t71_lati)
+
+      call sub3(t71_tmp1,vlong,t71_long,npts)
+      call sub3(t71_tmp2,vlati,t71_lati,npts)
+      t71_err1 = glamax(t71_tmp1,npts)
+      t71_err2 = glamax(t71_tmp2,npts)
+
+      if(nid.eq.0) write(*,*)
+     $   'Lcheck t71:Usph2sub2sup2sph err',t71_err1,t71_err2
+
+      call Usph2sup(vlong,vlati,t72_up1,t72_up2)
+      call Usup2sub(t72_up1,t71_up2,t72_ub1,t72_ub2)
+      call Usub2sph(t72_ub1,t71_ub2,t72_long,t72_lati)
+
+      call sub3(t72_tmp1,vlong,t72_long,npts)
+      call sub3(t72_tmp2,vlati,t72_lati,npts)
+      t72_err1 = glamax(t72_tmp1,npts)
+      t72_err2 = glamax(t72_tmp2,npts)
+
+      if(nid.eq.0) write(*,*)
+     $   'Lcheck t72:Usph2sup2sub2sph err',t72_err1,t72_err2
 
       return
       end
