@@ -265,7 +265,7 @@ c     kHX=rk4a(i)*kHX
       ca = rk4a(ii) ! 
       cb = rk4b(ii)
 
-      call rk4_upd(CS_h,CS_kh,resCS_h,cb,ca,dt,npts) ! kh = ca*kh + dt*resCS
+      call rk4_upd(CS_Jh,CS_kJh,resCS_Jh,cb,ca,dt,npts) ! kh = ca*kh + dt*resCS
                                                    !  h =     h + cb*kh 
       call rk4_upd(CS_V_ub1,CS_kub1,resCS_ub1,cb,ca,dt,npts)
       call rk4_upd(CS_V_ub2,CS_kub2,resCS_ub2,cb,ca,dt,npts)
@@ -351,6 +351,50 @@ c
              w2(k) = us2(i)/sym1(k,1,1,1)
 
              w0(k) = (w1(k)+w2(k))/EqAngJac(k)
+           enddo
+         enddo
+
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine CS_cem_Jdiv(w0,w1,w2,u1,u2,h,EqAngJac)
+c-----------------------------------------------------------------------
+c     div: w = 1/J d/dx (J u1 h) + 1/J d/dy (J u2 h)
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+
+      real w0(1),w1(1),w2(1),w3(1),u1(1),u2(1),u3(1),h(1),EqAngJac(1)
+      integer e,i,j,k,nn
+
+      common /div3d/ ur1(lx1*ly1*lz1),us1(lx1*ly1*lz1),ut1(lx1*ly1*lz1)
+     $             , ur2(lx1*ly1*lz1),us2(lx1*ly1*lz1),ut2(lx1*ly1*lz1)
+     $             , ur3(lx1*ly1*lz1),us3(lx1*ly1*lz1),ut3(lx1*ly1*lz1)
+      real ur1,us1,ut1,ur2,us2,ut2,ur3,us3,ut3
+      real ju1h(lx1*ly1*lz1*lelv),ju2h(lx1*ly1*lz1*lelv)
+
+      nn = nx1-1
+c
+      if (if3d) then ! Lan, for now only have 2D
+
+      else
+
+         call col4(ju1h,EqAngJac,u1,h,npts)
+         call col4(ju2h,EqAngJac,u2,h,npts)
+
+         do e = 1,nelt
+           j = nxyz*(e-1)
+           call CS_local_dxi1(ur1,ju1h,nn,e,dxm1) ! ur1=dxm1*u1
+           call CS_local_dxi2(us2,ju2h,nn,e,dxtm1)! us2=u2*dxtm1
+
+           do i = 1,nxyz
+             k = i + nxyz*(e-1)
+             w1(k) = ur1(i)/rxm1(k,1,1,1)
+             w2(k) = us2(i)/sym1(k,1,1,1)
+
+             w0(k) = (w1(k)+w2(k))
            enddo
          enddo
 
@@ -732,9 +776,9 @@ cc      call CS_adv_restrict_to_face ! cem_maxwell_add_flux_to_res ! not work
 c      call userinc(rktime,fhn(1,1),fhn(1,2),fhn(1,3),
 c     $                    fen(1,1),fen(1,2),fen(1,3)) ! ToDO: change variables, Lan
 
-      call CS_SWE_flux(srflx)  ! << cem_maxwell_flux
+c      call CS_SWE_flux(srflx)  ! << cem_maxwell_flux
 
-      call CS_SWE_add_flux_to_res(srflx) ! << cem_maxwell_add_flux_to_res
+c      call CS_SWE_add_flux_to_res(srflx) ! << cem_maxwell_add_flux_to_res
 
 c      call usersrc(rktime,reshn(1,1),reshn(1,2),reshn(1,3), ! ToDO: change variable name, Lan
 c     $                    resen(1,1),resen(1,2),resen(1,3))
@@ -754,16 +798,20 @@ c-----------------------------------------------------------------------
       real w0(lx1*ly1*lz1*lelt)
       real w1(lx1*ly1*lz1*lelt)
       real w2(lx1*ly1*lz1*lelt)
+      real tt1(lx1*ly1*lz1*lelt)
+      real tt2(lx1*ly1*lz1*lelt)
       real ub1u1(lx1*ly1*lz1*lelt)
       real ub2u2(lx1*ly1*lz1*lelt)
       real vort(lx1*ly1*lz1*lelt)  ! vorticity
 c
       integer i
 
-C     Eq. Advection: dh/dt = resCS_h = -div(V*h)
       call Usub2sup(CS_V_ub1,CS_V_ub2,CS_V_u1,CS_V_u2)
-      call CS_cem_div(w0,w1,w2,CS_V_u1,CS_V_u2,CS_h,CS_Jac)
-      call cmult2(resCS_h,w0,-1.0,npts) ! resCS_h = -w0
+      call invcol3(CS_h,CS_Jh,CS_Jac,npts)
+
+C     Eq. Advection: dh/dt = resCS_h = -div(V*h)
+      call CS_cem_Jdiv(w0,w1,w2,CS_V_u1,CS_V_u2,CS_h,CS_Jac)
+      call cmult2(resCS_Jh,w0,-1.0,npts) ! resCS_h = -w0
 
 
 C     Eq. 2-3
@@ -771,8 +819,8 @@ c     Compute Energy
       call col3(ub1u1,CS_V_ub1,CS_V_u1,npts)
       call col3(ub2u2,CS_V_ub2,CS_V_u2,npts)
       call add3(CS_Phi,CS_h,CS_hs,npts)
-      call cmult2(CS_Phi,CS_Phi,gravity,npts) ! resCS_h = -w0
-      do i = 1 , npts
+      call cmult(CS_Phi,gravity,npts) ! resCS_h = -w0
+      do i = 1,npts
          CS_E(i) = CS_Phi(i)                   ! potential
      $           + 0.5*(ub1u1(i)+ub2u2(i))     ! kinetic
       enddo
@@ -780,7 +828,7 @@ c     Compute Energy
       call CS_cem_Jgrad(w1,w2,CS_E)!  J*grad(E)=(w1,w2)=(dE/dx1,dE/dx2)
 
 c     Compute Source terms
-      call CS_cem_curl(w0,w1,w2,CS_V_ub1,CS_V_ub2,CS_Jac)
+      call CS_cem_curl(w0,tt1,tt2,CS_V_ub1,CS_V_ub2,CS_Jac)
       call add3(vort,CS_Coriolis,w0,npts) ! vort = Coriolis + curl(V)
 
       call col4(CS_S1,CS_Jac,CS_V_u2,vort,npts)
@@ -792,9 +840,15 @@ C     Compute res
 
 
 c     Temporory output to check res, ToDo: remove later, by Lan
-      call copy(EN(1,1),resCS_h,npts)
+      call copy(EN(1,1),resCS_Jh,npts)
       call copy(EN(1,2),resCS_ub1,npts)
       call copy(EN(1,3),resCS_ub2,npts)
+
+      call chk_amax('CSH',resCS_Jh,npts)
+      call chk_amax('CS1',resCS_ub1,npts)
+      call chk_amax('CS2',resCS_ub2,npts)
+
+
 
       return
       end
@@ -900,7 +954,7 @@ c     Compute alpha^2 = mxa( |u^2| + sqrt( Phi + G^{22} ))
       enddo
       alpha_F2 = glmax(tmp_alpha,npts)
 
-      CS_tau = 2.d0                   ! 1.0d0 ; 2.0d0 ;
+      CS_tau = 4.0                   ! 1.0d0 ; 2.0d0 ;
       CS_pen = CS_tau*(nx1-1)*nx1*0.5 ! if using 1.0, h begins going to negative
 
 
@@ -910,17 +964,8 @@ c     Compute alpha^2 = mxa( |u^2| + sqrt( Phi + G^{22} ))
       do i = 1,nxzfl
          j = cemface(i)
          srfm_ub1(i)   = CS_V_ub1(j)
-      enddo
-      do i = 1,nxzfl
-         j = cemface(i)
          srfm_ub2(i)   = CS_V_ub2(j)
-      enddo
-      do i = 1,nxzfl
-         j = cemface(i)
          srfm_u1(i)   = CS_V_u1(j)
-      enddo
-      do i = 1,nxzfl
-         j = cemface(i)
          srfm_u2(i)   = CS_V_u2(j)
       enddo      
 
@@ -939,7 +984,7 @@ c        srf_v(f*k+i)   = v_lati(i)
          tmp_flx(f*k+i) = srf_v(f*k+i)          
       enddo
       call gs_op_fields(gsh_face,srf_v,nxzfl,2,1,1,0)   ! srf_v   = v^- + v^+
-      call add3s2(out_flx,tmp_flx,srf_v,-1.0,1.0,nxzfl) ! out_flx = -tmp_flx + srf_v
+      call add3s2(out_flx,tmp_flx,srf_v,-1.0,1.0,2*nxzfl) ! out_flx = -tmp_flx + srf_v
 c$$$      f = 0
 c$$$      do i = 1,nxzfl
 c$$$         j = cemface(i)
