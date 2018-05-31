@@ -119,8 +119,10 @@ C     Compute: out_flx = (h^- - h^+)
       k = nxzfl
       do i = 1,nxzfl
         j = cemface(i) ! volume index
-        srflx(0*k+i) = CS_h(j)
-        tmp_flx(i)   = CS_h(j)
+        srflx(0*k+i) = CS_h(j) ! advection
+        srflx(1*k+i) = CS_h(j) !   ub1
+        srflx(2*k+i) = CS_h(j) !   ub2
+        tmp_flx(i)   = CS_h(j) ! a copy
       enddo
 
       t0 = dclock()
@@ -140,6 +142,58 @@ C     Compute:
       return
       end
 c-----------------------------------------------------------------------
+      subroutine CS_SWE_flux(srflx)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+c      include 'CUBESPHERE'
+      real srflx(6*2*ldim*lx1*lz1*lelt)
+
+      if (ldim.eq.3) then
+         write(*,*)'CS only support 2D problem'
+         call exitt
+      else
+c         call CS_SWE_flux2d(srflx) ! << cem_maxwell_flux
+      endif
+
+      return
+      end
+cc-----------------------------------------------------------------------
+c      subroutine CS_adv_flux2d(srflx)
+cc-----------------------------------------------------------------------
+c      implicit none
+c      include 'SIZE'
+c      include 'GEOM'
+c      include 'INPUT'
+c      include 'TOPOL'
+c      include 'TSTEP'
+c      include 'PARALLEL'
+c      include 'RK5'
+c      include 'CUBESPHERE'
+c
+c      real dclock,t0
+c      real srflx(6*2*ldim*lx1*lz1*lelt)
+c      real C0,Y0,Y1,Z0,Z1,fu1,fu2,fu3,fw1,fw2,fw3
+c      integer i,j,k,e,f
+c      real tmp_flx(2*ldim*nx1*nz1*lelt) ! tmp
+c      real out_flx(2*ldim*nx1*nz1*lelt) ! global
+c
+c      real tmp
+c
+c
+c
+c
+c
+c
+c
+c
+c
+c
+c
+c      return
+c      end
+cc-----------------------------------------------------------------------
       subroutine CS_adv_add_flux_to_res(srflx)
 c-----------------------------------------------------------------------
       implicit none
@@ -427,6 +481,26 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
+      subroutine Usph2sub_srf(ulong,ulati,ub1,ub2)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CUBESPHEREGRID'
+
+      real ulong(lpts1),ulati(lpts1)
+      real ub1(lpts1),ub2(lpts1)
+      integer i,k
+
+      do i=1,nxzfl  ! u_sub = A^T * u_sph
+        k=cemface(i)
+        ub1(i) = CS_A_11(k)*ulong(i) + CS_A_21(k)*ulati(i)
+        ub2(i) = CS_A_12(k)*ulong(i) + CS_A_22(k)*ulati(i)
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
       subroutine Usub2sph(ub1,ub2,ulong,ulati)
 c-----------------------------------------------------------------------
       implicit none
@@ -441,6 +515,26 @@ c-----------------------------------------------------------------------
       do i=1,npts  ! u_sph = inv(A^T) * u_sub
         ulong(i) = CS_ainv11(i)*ub1(i) + CS_ainv21(i)*ub2(i)
         ulati(i) = CS_ainv12(i)*ub1(i) + CS_ainv22(i)*ub2(i)
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine Usub2sph_srf(ub1,ub2,ulong,ulati)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CUBESPHEREGRID'
+
+      real ulong(lpts1),ulati(lpts1)
+      real ub1(lpts1),ub2(lpts1)
+      integer i,k
+
+      do i=1,nxzfl  ! u_sph = inv(A^T) * u_sub
+        k=cemface(i)
+        ulong(i) = CS_ainv11(k)*ub1(i) + CS_ainv21(k)*ub2(i)
+        ulati(i) = CS_ainv12(k)*ub1(i) + CS_ainv22(k)*ub2(i)
       enddo
 
       return
@@ -465,6 +559,26 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
+      subroutine Usph2sup_srf(ulong,ulati,up1,up2)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CUBESPHEREGRID'
+
+      real ulong(lpts1),ulati(lpts1)
+      real up1(lpts1),up2(lpts1)
+      integer i,k
+
+      do i=1,npts
+        k=cemface(i)
+        up1(i) = CS_ainv11(k)*ulong(i) + CS_ainv12(k)*ulati(i)
+        up2(i) = CS_ainv21(k)*ulong(i) + CS_ainv22(k)*ulati(i)
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
       subroutine Usup2sph(up1,up2,ulong,ulati)
 c-----------------------------------------------------------------------
       implicit none
@@ -479,6 +593,26 @@ c-----------------------------------------------------------------------
       do i=1,npts
         ulong(i) = CS_A_11(i)*up1(i) + CS_A_12(i)*up2(i)
         ulati(i) = CS_A_21(i)*up1(i) + CS_A_22(i)*up2(i)
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine Usup2sph_srf(up1,up2,ulong,ulati)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CUBESPHEREGRID'
+
+      real ulong(lpts1),ulati(lpts1)
+      real up1(lpts1),up2(lpts1)
+      integer i,k
+
+      do i=1,npts
+        k=cemface(i)
+        ulong(i) = CS_A_11(k)*up1(i) + CS_A_12(k)*up2(i)
+        ulati(i) = CS_A_21(k)*up1(i) + CS_A_22(k)*up2(i)
       enddo
 
       return
@@ -500,6 +634,27 @@ c-----------------------------------------------------------------------
       do i=1,npts
         up1(i) = CS_ginv11(i)*ub1(i) + CS_ginv12(i)*ub2(i)
         up2(i) = CS_ginv21(i)*ub1(i) + CS_ginv22(i)*ub2(i)
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine Usub2sup_srf(ub1,ub2,up1,up2)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CUBESPHEREGRID'
+
+      real ub1(lpts1),ub2(lpts1)
+      real up1(lpts1),up2(lpts1)
+
+      integer i,k
+
+      do i=1,npts
+        k=cemface(i)
+        up1(i) = CS_ginv11(k)*ub1(i) + CS_ginv12(k)*ub2(i)
+        up2(i) = CS_ginv21(k)*ub1(i) + CS_ginv22(k)*ub2(i)
       enddo
 
       return
@@ -532,6 +687,33 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
+      subroutine Usup2sub_srf(up1,up2,ub1,ub2)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CUBESPHEREGRID'
+
+      real ub1(lpts1),ub2(lpts1)
+      real up1(lpts1),up2(lpts1)
+      real g11,g12,g21,g22
+
+      integer i,k
+
+      do i=1,npts    ! u_sub = G * u_sup
+        k=cemface(i)
+        g11 = CS_A_11(k)**2 + CS_A_21(k)**2
+        g12 = CS_A_11(k)*CS_A_12(k) + CS_A_21(k)*CS_A_22(k)
+        g21 = g12
+        g22 = CS_A_12(k)**2 + CS_A_22(k)**2
+
+        ub1(i) = g11*up1(i) + g12*up2(i)
+        ub2(i) = g21*up1(i) + g22*up2(i)
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
       subroutine CS_SWE_op
 c-----------------------------------------------------------------------
       implicit none
@@ -549,7 +731,7 @@ cc      call CS_adv_restrict_to_face ! cem_maxwell_add_flux_to_res ! not work
 c      call userinc(rktime,fhn(1,1),fhn(1,2),fhn(1,3),
 c     $                    fen(1,1),fen(1,2),fen(1,3)) ! ToDO: change variables, Lan
 
-cc      call CS_adv_flux(srflx)  ! << cem_maxwell_flux
+c      call CS_SWE_flux(srflx)  ! << cem_maxwell_flux
 
 cc      call CS_adv_add_flux_to_res(srflx) ! << cem_maxwell_add_flux_to_res
 
