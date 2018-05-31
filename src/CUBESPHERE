@@ -32,12 +32,15 @@ c=====================================================================
      $     CS_kub2     (lpts1),     ! RK step for ub2    
      $     CS_E        (lpts1),     ! Energy
      $     CS_K        (lpts1),     ! (un-used, by Lan)
+     $     CS_Phi      (lpts1),     ! potential
      $     CS_zeta     (lpts1),     ! curl(V)*khat
      $     CS_Coriolis (lpts1),     ! Coriolis force
      $     CS_hs       (lpts1),     ! surface height (mountain)
      $     CS_S1       (lpts1),     ! source term, ToDo: put into local, by Lan
-     $     CS_S2       (lpts1)
+     $     CS_S2       (lpts1),
+     $     CS_tau
       real CS_hs
+      real CS_Phi
       real resCS_ub1
       real resCS_ub2
       real CS_kub1
@@ -50,6 +53,7 @@ c=====================================================================
       real CS_Coriolis
       real CS_S1
       real CS_S2
+      real CS_tau
 
 
       common /cs_EarthPara/
