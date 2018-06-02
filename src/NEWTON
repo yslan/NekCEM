@@ -1,3 +1,41 @@
+c=====================================================================
+c   NEWTON Parameters
+c=====================================================================
+      common /newton_flag/
+     $      ifparamNT      ! if using parameters from .usr
+      logical ifparamNT
+
+      common /newton_paramr/
+     $     dtNT,           ! pseudo-timestep tau
+     $     alphaNT,        ! relaxation parameter \alpha \in (0,1]
+     $     jaceps,         ! perturbation parameter for Jacobi-free
+     $     tolGMRES,       ! tolerance for GMRES, todo: remove, Lan
+     $     tolNT,          ! tolerance for Newton method
+     $     min_tol,        ! Min. of tol,  avoid NaN
+     $     max_dtNT,       ! Max. of dtNT, avoid NaN
+     $     max_dt,         ! Max. of dt, satisfying CFL
+     $     dt_const,       ! constant c for the formula dt = c * dtNT
+     $     f_pre,          ! f norm from previous step
+     $     f_now,          ! f norm of current step
+     $     inexactNT(lcdim)
+      real dtNT,alphaNT,jaceps,tolGMRES,tolNT
+     $    ,min_tol,max_dtNT,max_dt
+     $    ,dt_const,f_pre,f_now
+     $    ,inexactNT
+
+      common /newton_parami/
+     $      maxit,         ! iteration for Newton method
+     $      ifsep,         ! 0 = couple, 1 = seperate
+     $      inexactNT_flag,! 0: fixed 0.1  1: r/r_pre  2: abs(r-res)/r_pre
+     $      dt_flag,       ! 0: fixed dt  1: dt = const * dtNT
+     $      dtNT_flag,     ! 1: dtNT=c*dtNT  2:SER  -2:SER + constraint
+     $      BDFcnt(lcdim+1)! count how many BDF1 is called
+      integer maxit,ifsep,BDFcnt,inexactNT_flag,dt_flag,dtNT_flag
+
+c=====================================================================
+c   Main Working Variables for NEWTON
+c=====================================================================
+
       common /newtonv/
      $     sn_k(lpts1,lcdim),
      $     gn_k(lpts1,lcdim),
@@ -7,8 +45,8 @@
      $     fn  (lpts1,lcdim)
       real sn_k,gn_k,cni,cno,cn_k,fn
 
-      common /newtons/ dtNT,dtNTinv,dtinv,epsinv,jaceps
-      real dtNT,dtNTinv,dtinv,epsinv,jaceps
+      common /newtons/ dtNTinv,dtinv,epsinv
+      real dtNTinv,dtinv,epsinv
 
-      common /newtoni/ iterNT,BDFcnt
-      integer iterNT,BDFcnt(lcdim+1)
+      common /newtoni/ iterNT
+      integer iterNT
