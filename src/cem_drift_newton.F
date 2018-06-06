@@ -254,14 +254,12 @@ c        call compute_energy
         call cem_out
 
         if (nid.eq.0.AND.mod(istep,iocomm).eq.0) then
+          write(6,*)'newton BDFcnt: istep = ',istep
           write(6,*)'newton BDFcnt: #Poisson solver = ',BDFcnt(1)
           do ic = 1,lcdim
             write(6,991)ic,BDFcnt(ic+1)
           enddo
-         endif
-
-
-
+        endif
 
         if (irestart.gt.0) then 
           if (mod(istep,irestart).eq.0) then
@@ -269,10 +267,6 @@ c        call compute_energy
               write(6,*)'Writing newton.restart! at istep=',istep
               call write_paramNT  ! write newton.restart
 
-              write(6,*)'newton BDFcnt: #Poisson solver = ',BDFcnt(1)
-              do ic = 1,lcdim
-                write(6,991)ic,BDFcnt(ic+1)
-              enddo
             endif
           endif
         endif 

@@ -294,7 +294,7 @@ c-----------------------------------------------------------------------
 
          call userprint(istep,time,dt,l2,linf,cpu_t,cpu_p_t)
 
-         if (istep.eq.nsteps) then
+         if (istep.eq.10) then ! error at NT10
             do i = 1,6
                if (l2(i).gt.l2tol(i)) call exitt(1)
                if (linf(i).gt.linftol(i)) call exitt(1)
