@@ -16,12 +16,11 @@ c-----------------------------------------------------------------------
       integer ic
 
       do ic = 1,lcdim
-        call rzero(sn_k(1,ic),npts)
-        call rzero(gn_k(1,ic),npts)
-        call rzero(cni (1,ic),npts)
-        call rzero(cno (1,ic),npts)
-        call rzero(cn_k(1,ic),npts)
         call rzero(fn  (1,ic),npts)
+        call rzero(gn_n(1,ic),npts)
+        call rzero(c_k0(1,ic),npts)
+        call rzero(cn_k(1,ic),npts)
+        call rzero(sn_k(1,ic),npts)
       enddo
       call izero(BDFcnt,lcdim+1)  ! count the BDF1 usage
 
@@ -33,27 +32,24 @@ c     Set default ParamNT
         ! turn this on in user file and use parameters set in uservp
       else
 
-        ifsep = 1             ! 0=couple, 1=separate, Lan
+        maxit     = 20       ! iteration for Newton method
+        dtNT = param(1)      ! pseudo-transient time step
+                             ! it can grow as istep increase 
 
-        alphaNT = 1.0        ! relaxation parameter of NT solver \alpha \in (0,1]
-c       nsteps = 200         ! steps for pseudo-transient continuation
-        maxit = 20           ! iteration for Newton method
-        jaceps = 1e-5        ! perturbation parameter for Jacobi-free
-
-c        tolGMRES = 1e-10    ! tolerance for GMRES
-        tolNT = 1e-5         ! tolerance for Newton method
-
+        ifsep     = 1        ! 0=couple, 1=separate, Lan
         inexactNT_flag = 0   ! 0: fixed 0.1  1: r/r_pre  2: abs(r-res)/r_pre
         dt_flag   = 0        ! 0: fixed dt  1: dt = const * dtNT
         dtNT_flag = 2        ! 1: dtNT=c*dtNT  2:SER  -2:SER + constraint
 
-        dtNT = param(1)      ! pseudo-transient time step
-                             ! it can grow as istep increase 
-        max_dtNT  = 1E5      ! Max. of dtNT, avoid NaN
-        min_tol   = 1E-12    ! Min. of tol,  avoid NaN
+        alphaNT   = 1.0      ! relaxation parameter of NT solver \alpha \in (0,1]
+        jaceps    = 1e-5     ! perturbation parameter for Jacobi-free
         dt_const  = 1E-4     ! constant c for the formula dt = c * dtNT
                              ! c = 1, 0.1, 0.01, 0.001, 0.0001
                              ! c = 0.0001 is the best case up to now
+
+        tolNT     = 1e-5     ! tolerance for Newton method
+        max_dtNT  = 1E5      ! Max. of dtNT, avoid NaN
+        min_ftol  = 1E-12    ! Min. of f norm, avoid NaN
         max_dt    = 1E-1     ! Max. of dt, should be satisfied CFL
 
       endif
@@ -90,7 +86,7 @@ c-----------------------------------------------------------------------
       call cem_drift_newton_init ! paramNT
 
 
-c     Adjust restart time step
+c     adjust restart time step
       if (.not.usesteps) then
          if (ifrestart) then
             nsteps = int((fintim-restart_time)/dt)
@@ -117,16 +113,15 @@ c     Adjust restart time step
       endif
     3 format(' istep =', i10,'  to',i10)
 
-c     Initial time step info 
+c     the initial step
       istep = ifirst-1
       call userchk
       call cem_out
 
       if (nsteps.eq.0) call cem_end
-c     ======> End of Timing Info <======
 
-c     compute initial
 
+c     compute initials
       epsinv = 1./jaceps   ! eps for approximation for jacobian
 
       call get_dt(dt,max_dt,dtNT,dt_const,dt_flag)
@@ -135,13 +130,13 @@ c     compute initial
       
       do ic = 1,lcdim
         call copy (cn_k(1,ic),cN(1,ic),npts) ! get the initial condition
-        call copy (cni(1,ic),cn_k(1,ic),npts)
+        call copy (c_k0(1,ic),cn_k(1,ic),npts)
       enddo
 
       call compute_f_couple(fn,cn_k,npts)
-      call compute_gk(gn_k,fn,cn_k,cni,npts) ! compute rhs g_k for GMRES
+      call compute_gk(gn_n,fn,cn_k,c_k0,npts) ! compute rhs g_k for GMRES
       do ic = 1,lcdim
-        call chsign (gn_k(1,ic),npts)
+        call chsign (gn_n(1,ic),npts)
       enddo
 
       do ic = 1,lcdim
@@ -151,27 +146,22 @@ c     compute initial
       fnorm = glmax(fnorms,lcdim)
       f_now = fnorm
 
-
 c     Start timer
       cpu_t = 0.0
       cpu_chk = 0.0
 
-c     start pseudo-time step
+
+c     Start pseudo-time step
       istep = ifirst
       do while(.true.)
 
         cpu_dtime = dclock()
 
-c       Determine inexactNT, dtNT, dt
-        do ic = 1,lcdim
-          call get_inexactNT(inexactNT(ic),rnorms(ic),rnorms_pre(ic)
-     $                      ,res_gmres(ic),iterNT,inexactNT_flag)
-        enddo
-
+c       determine dtNT, dt
         if ((istep .eq. 1)) then
           dtNT = param(1)
         else
-          call get_dtNT(dtNT,max_dtNT,f_pre,f_now,min_tol,dtNT_flag)
+          call get_dtNT(dtNT,max_dtNT,f_pre,f_now,min_ftol,dtNT_flag)
         endif
         dtNTinv = 1./dtNT
 
@@ -179,16 +169,22 @@ c       Determine inexactNT, dtNT, dt
         call get_dt(dt,max_dt,dtNT,dt_const,dt_flag)
         dtinv = 1./dt
 
-         
-c       start Newton iteration
 
+c       Start Newton iteration
         do iterNT=1,maxit
+
+c         determine inexactNT
+          do ic = 1,lcdim
+            call get_inexactNT(inexactNT(ic),rnorms(ic),rnorms_pre(ic)
+     $                        ,res_gmres(ic),iterNT,inexactNT_flag)
+          enddo
+
           if (ifsteric) then
-c            call drift_hmh_gmres_NTsteric(sn_k,gn_k,cn_k,fn
+c            call drift_hmh_gmres_NTsteric(sn_k,gn_n,cn_k,fn
 c     $           ,mult,lcdim,npts,tolGMRES)
           else
             do ic = 1,lcdim
-              call drift_hmh_gmres_newton(sn_k(1,ic),gn_k(1,ic)
+              call drift_hmh_gmres_newton(sn_k(1,ic),gn_n(1,ic)
      $             ,cn_k,fn(1,ic),mult,lcdim,npts
      $             ,res_gmres(ic),inexactNT(ic),ic,ifsep)
             enddo
@@ -198,13 +194,13 @@ c     $           ,mult,lcdim,npts,tolGMRES)
           enddo
 
           call compute_f_couple(fn,cn_k,npts)
-          call compute_gk(gn_k,fn,cn_k,cni,npts)  ! checking tol. + next NT iter
+          call compute_gk(gn_n,fn,cn_k,c_k0,npts)  ! checking tol. + next NT iter
           do ic = 1,lcdim
-            call chsign(gn_k(1,ic),npts)
+            call chsign(gn_n(1,ic),npts)
           enddo
 
           do ic = 1,lcdim
-            rnorms(ic) = glsc3(gn_k(1,ic),gn_k(1,ic),mult,npts)
+            rnorms(ic) = glsc3(gn_n(1,ic),gn_n(1,ic),mult,npts)
             rnorms(ic) = sqrt(rnorms(ic))
           enddo
           rnorm = glmax(rnorms,lcdim)
@@ -222,7 +218,7 @@ c          if (rnorm.lt.new_tol) goto 900
 900     continue
 
         do ic = 1,lcdim
-          call copy(cni(1,ic),cn_k(1,ic),npts)   ! update cn_i for compute gn
+          call copy(c_k0(1,ic),cn_k(1,ic),npts)   ! update c_k0 for compute gn
         enddo                           ! for next pseudo-time step
         do ic = 1,lcdim
           call copy(cN(1,ic),cn_k(1,ic),npts) ! just for cem_out
@@ -253,7 +249,7 @@ c        call compute_energy
 
         call cem_out
 
-        if (nid.eq.0.AND.mod(istep,iocomm).eq.0) then
+        if (nid.eq.0.AND.mod(istep,iocomm).eq.0) then ! conut #BDF1
           write(6,*)'newton BDFcnt: istep = ',istep
           write(6,*)'newton BDFcnt: #Poisson solver = ',BDFcnt(1)
           do ic = 1,lcdim
@@ -261,11 +257,11 @@ c        call compute_energy
           enddo
         endif
 
-        if (irestart.gt.0) then 
+        if (irestart.gt.0) then ! write newton.restart
           if (mod(istep,irestart).eq.0) then
             if (nid.eq.0) then
               write(6,*)'Writing newton.restart! at istep=',istep
-              call write_paramNT  ! write newton.restart
+              call write_paramNT
 
             endif
           endif
@@ -278,6 +274,7 @@ c        call compute_energy
         else
           if (time.ge.fintim) goto 901
         endif
+
       enddo
 
   901 continue
@@ -292,10 +289,10 @@ c     This routine computes gk for each Newton iteration
 c
 c          g^{n}_k = u^{n}_k - \delta t f(u^{n}_k) - u^{n}_0
 c
-c     Input    cpi,cni denote the initial of each Newton iteration 
-c     Input    cp_k,cn_k
-c     Output   gp_k,gn_k
-      subroutine compute_gk(gon,fon,ckn,c0n,n)
+c     Input    c_k0 denote the initial of each Newton iteration 
+c     Input    cn_k
+c     Output   gn_n
+      subroutine compute_gk(g_out,f,ck,c0,n)
 c-----------------------------------------------------------------------      
       implicit none
       include 'SIZE'
@@ -303,15 +300,15 @@ c-----------------------------------------------------------------------
       include 'DRIFT' !lcdim
       include 'NEWTON'
       integer n,ic
-      real gon(lpts1,lcdim)
-     $   , ckn(lpts1,lcdim)
-     $   , c0n(lpts1,lcdim)
-     $   , fon(lpts1,lcdim)
+      real g_out(lpts1,lcdim)
+     $   , ck  (lpts1,lcdim)
+     $   , c0  (lpts1,lcdim)
+     $   , f   (lpts1,lcdim)
 
       do ic = 1,lcdim
-        call add3s3(gon(1,ic),ckn(1,ic),fon(1,ic),c0n(1,ic)
+        call add3s3(g_out(1,ic),ck(1,ic),f(1,ic),c0(1,ic)
      $       ,1.0,-1.0*dtNT,-1.0,n)
-        call cmult(gon(1,ic),dtNTinv,n)   ! case with divided by dt_newton
+        call cmult(g_out(1,ic),dtNTinv,n)   ! case with divided by dt_newton
       enddo
 
       return
@@ -322,26 +319,23 @@ c     BDF1, it can be changed to BDF2 or so on.
 c  
 c       f(u) = 1/dt ( \tilde{u} - u ),   \tilde{u} = BDF1(u)
 c
-      subroutine compute_f_sep(fon,cin,iflag,n)
+      subroutine compute_f_sep(f_out,c_in,iflag,n)
 c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'TOTAL'
       include 'DRIFT'
       include 'NEWTON'
-      include 'POISSON' 
 
       integer n,ic,iflag
-      real fon(lpts1) ! f output
-      real cin(lpts1,lcdim) ! c input
-      real cout(lpts1,lcdim) ! c output
-      real cn_bak(lpts1,lcdim) ! c output (sem_bdf)
-
+      real f_out(lpts1) ! f output
+      real c_in (lpts1,lcdim) ! c input
+      real c_out(lpts1,lcdim) ! c output
       
-      call cem_drift_sem_bdf1_newton(cin,cout,n,iflag)
+      call cem_drift_sem_bdf1_newton(c_in,c_out,n,iflag)
 
-      call sub3(fon,cN(1,iflag),cin(1,iflag),n)
-      call cmult(fon,dtinv,n)
+      call sub3(f_out,c_out(1,iflag),c_in(1,iflag),n)
+      call cmult(f_out,dtinv,n)
 
       return
       end
@@ -351,29 +345,24 @@ c     BDF1, it can be changed to BDF2 or so on.
 c  
 c       f(u) = 1/dt ( \tilde{u} - u ),   \tilde{u} = BDF1(u)
 c
-      subroutine compute_f_couple(fon,cin,n)
+      subroutine compute_f_couple(f_out,c_in,n)
 c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'TOTAL'
       include 'DRIFT'
       include 'NEWTON'
-      include 'POISSON' 
-      integer n,ic
-      real fon(lpts1,lcdim) ! f output
-      real cin(lpts1,lcdim) ! c input
-      real cout(lpts1,lcdim) ! c output
-      real con(lpts1,lcdim) ! c output (sem_bdf)
-      real cn_bak(lpts1,lcdim) ! c output (sem_bdf)
 
-c      do ic = 1,lcdim
-c        call copy(cN(1,ic),cin(1,ic),n)
-c      enddo
-      call cem_drift_sem_bdf1_newton(cin,cout,n,0)
+      integer n,ic
+      real f_out(lpts1,lcdim) ! f output
+      real c_in (lpts1,lcdim) ! c input
+      real c_out(lpts1,lcdim) ! c output
+
+      call cem_drift_sem_bdf1_newton(c_in,c_out,n,0)
 
       do ic = 1,lcdim
-        call sub3(fon(1,ic),cN(1,ic),cin(1,ic),n)
-        call cmult(fon(1,ic),dtinv,n)
+        call sub3(f_out(1,ic),c_out(1,ic),c_in(1,ic),n)
+        call cmult(f_out(1,ic),dtinv,n)
       enddo
 
       return
@@ -915,10 +904,10 @@ c        dtNT = dtNT * f_pre/f_now
 c     - fixed increasing rate 
 c        dtNt = dtNT * c
 c     input: all, output: dtNT
-      subroutine get_dtNT(dtNT,max_dtNT,f_pre,f_now,min_tol,iflag)
+      subroutine get_dtNT(dtNT,max_dtNT,f_pre,f_now,min_ftol,iflag)
 c-----------------------------------------------------------------------
       implicit none
-      real dtNT,max_dtNT,f_pre,f_now,min_tol
+      real dtNT,max_dtNT,f_pre,f_now,min_ftol
       real const, ratio
       integer iflag
 
@@ -928,7 +917,7 @@ c-----------------------------------------------------------------------
 
       elseif (iflag.eq. 2) then ! SER
 
-        if (f_now.lt.min_tol) then
+        if (f_now.lt.min_ftol) then
           dtNT = max_dtNT
         else
           ratio= f_pre/ f_now
@@ -937,7 +926,7 @@ c-----------------------------------------------------------------------
 
       elseif (iflag.eq.-2) then ! SER with constraint
 
-        if (f_now.lt.min_tol) then ! near steady state
+        if (f_now.lt.min_ftol) then ! near steady state
           dtNT = max_dtNT
         else
           ratio= f_pre/ f_now
@@ -1080,7 +1069,7 @@ C     Set paramNT
       ifsep    = int(paramNT(3))   ! (int) 0=couple, 1=separate, Lan
       dtNT     = paramNT(4)        ! pseudo-transient time step
       max_dtNT = paramNT(5)        ! Max. of dtNT, avoid NaN
-      min_tol  = paramNT(6)        ! Min. of tol,  avoid NaN
+      min_ftol = paramNT(6)        ! Min. of f_pre, avoid NaN
       f_pre    = paramNT(7)        ! zero to set dtNT (or SER)
 
       ! 8~12 Newton iter
@@ -1090,7 +1079,6 @@ C     Set paramNT
       tolNT    = paramNT(11)       ! tolerance for Newton method
 
       ! 13~20 else
-      tolGMRES = paramNT(13)       ! tolerance for GMRES
 
       close(11)
 
@@ -1115,14 +1103,13 @@ c-----------------------------------------------------------------------
       paramNT(3)  = ifsep
       paramNT(4)  = dtNT
       paramNT(5)  = max_dtNT
-      paramNT(6)  = min_tol
+      paramNT(6)  = min_ftol
       paramNT(7)  = f_pre
       paramNT(8)  = alphaNT
       paramNT(9)  = maxit
       paramNT(10) = jaceps
       paramNT(11) = tolNT
       paramNT(12) = 0
-      paramNT(13) = tolGMRES
       paramNT(14) = 0
       paramNT(15) = 0
       paramNT(16) = 0
@@ -1137,7 +1124,7 @@ c-----------------------------------------------------------------------
      $           '3: ifsep,(int) 0 = couple, 1 = seperate'
       write(11,7)paramNT(4),'4: dtNT, pseudo-timestep tau'
       write(11,7)paramNT(5),'5: max_dtNT, Max. of dtNT, avoid NaN'
-      write(11,7)paramNT(6),'6: min_tol, Min. of tol,  avoid NaN'
+      write(11,7)paramNT(6),'6: min_ftol, Min. of f norm,  avoid NaN'
       write(11,7)paramNT(7),'7: f_pre, f norm from previous step'
       write(11,7)paramNT(8),
      $           '8: alpha, relaxation parameter \alpha \in (0,1]'
