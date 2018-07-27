@@ -520,9 +520,9 @@ c...  sacrify 2D optimization for simplicity::
 
          if     (imode.eq.3) then ! 3D
 
-            call maxwell_wght_dcurl
+            call maxwell_wght_dcurl_old
      $        (resEN(1,1),resEN(1,2),resEN(1,3),HN(1,1),HN(1,2),HN(1,3))
-            call maxwell_wght_dcurl
+            call maxwell_wght_dcurl_old
      $        (resHN(1,1),resHN(1,2),resHN(1,3),EN(1,1),EN(1,2),EN(1,3))
             call chsign (resHN(1,1),npts)
             call chsign (resHN(1,2),npts)
@@ -530,13 +530,13 @@ c...  sacrify 2D optimization for simplicity::
 
          elseif (imode.eq.2) then ! TM
 
-            call maxwell_wght_dcurl
+            call maxwell_wght_dcurl_old
      $        (resHN(1,1),resHN(1,2),resEN(1,3),HN(1,1),HN(1,2),EN(1,3))
             call chsign (resHN(1,1),npts)
             call chsign (resHN(1,2),npts)
 
          elseif (imode.eq.1) then ! TE
-            call maxwell_wght_dcurl
+            call maxwell_wght_dcurl_old
      $        (resEN(1,1),resEN(1,2),resHN(1,3),EN(1,1),EN(1,2),HN(1,3))
             call chsign (resHN(1,3),npts)
 
@@ -658,11 +658,19 @@ c-----------------------------------------------------------------------
       include 'TOTAL'
       include 'EMWAVE'
 
+      integer    ldd,md ! dealias
+      parameter (ldd = lxd**ldim  )
+      parameter ( md = lxd        )
+
       common /cemfce_acc/
      $     cemface2(2*ldim*lx1*lz1*lelt),
      $     cemface_ptr(0:2*ldim*lx1*lz1*lelt),
      $     cemface_ind(2*ldim*lx1*lz1*lelt)
       integer cemface2,cemface_ptr,cemface_ind
+
+      common /ddtmp4/ dxmd(lxd,lxd),dxtmd(lxd,lxd) ! dealias
+      common /ddtmp5/ w3md(ldd),wgld(lxd),zmd(lxd)
+      real            dxmd,dxtmd,w3md,wgld,zmd
 
       real srflx(6*2*ldim*lx1*lz1*lelt)
 
@@ -725,7 +733,11 @@ c-----------------------------------------------------------------------
       if (imode.eq.3) then  ! 3D
          do j = 1,ncemface
             i = cemface(j)
-            a = aream(j)
+            if (ifdealias) then
+              a = 1.0
+            else
+              a = aream(j)
+            endif
             resHN(i,1) = resHN(i,1) + a*srflx(0*k+j)
             resHN(i,2) = resHN(i,2) + a*srflx(1*k+j)
             resHN(i,3) = resHN(i,3) + a*srflx(2*k+j)
@@ -736,7 +748,11 @@ c-----------------------------------------------------------------------
       elseif (imode.eq.2) then  ! TM
          do j = 1,ncemface
             i = cemface(j)
-            a = aream(j)
+            if (ifdealias) then
+              a = 1.0
+            else
+              a = aream(j)
+            endif
             resHN(i,1) = resHN(i,1) + a*srflx(0*k+j)
             resHN(i,2) = resHN(i,2) + a*srflx(1*k+j)
             resEN(i,3) = resEN(i,3) + a*srflx(2*k+j)
@@ -744,7 +760,11 @@ c-----------------------------------------------------------------------
       elseif (imode.eq.1) then  ! TE
          do j = 1,ncemface
             i = cemface(j)
-            a = aream(j)
+            if (ifdealias) then
+              a = 1.0
+            else
+              a = aream(j)
+            endif
             resEN(i,1) = resEN(i,1) + a*srflx(0*k+j)
             resEN(i,2) = resEN(i,2) + a*srflx(1*k+j)
             resHN(i,3) = resHN(i,3) + a*srflx(2*k+j)
@@ -763,10 +783,18 @@ c-----------------------------------------------------------------------
 
       real srflx(6*2*ldim*lx1*lz1*lelt)
 
-      if (ldim.eq.3) then
-         call cem_maxwell_flux3d(srflx)
+      if (ifdealias) then
+        if (ldim.eq.3) then
+           call cem_maxwell_dflux3d(srflx)
+         else
+           call cem_maxwell_dflux3d(srflx)
+         endif
       else
-         call cem_maxwell_flux2d(srflx)
+        if (ldim.eq.3) then
+           call cem_maxwell_flux3d(srflx)
+        else
+           call cem_maxwell_flux2d(srflx)
+        endif
       endif
 
       return
@@ -808,6 +836,129 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
+      subroutine cem_maxwell_dflux2d(srflx)
+c-----------------------------------------------------------------------
+c     ToDo: add TM mode ylan
+      implicit none
+      include 'SIZE'
+      include 'GEOM'
+      include 'INPUT'
+      include 'TOPOL'
+      include 'TSTEP'
+      include 'EMWAVE'
+      include 'PARALLEL'
+      include 'RK5'
+      include 'DEALIAS'
+      include 'WZ' ! w3m1
+
+      integer    ldd,md
+      parameter (ldd = lxd**ldim  )
+      parameter ( md = lxd        )
+      common /ddtmp4/ dxmd(lxd,lxd),dxtmd(lxd,lxd)
+      common /ddtmp5/ w3md(ldd),wgld(lxd),zmd(lxd)
+      real            dxmd,dxtmd,w3md,wgld,zmd
+
+      common /finewts/ zptf(lxd),wgtf(lxd),wghtf(lxd*lzd),wghtc(lx1*lz1)
+      real zptf,wgtf,wghtf,wghtc
+c      real wghtf(lxd*lzd),wghtc(lx1*lz1)
+
+      real srflx_f(lxd*lzd,6)
+      real jaco_f(lxd*lzd),jaco_c(lx1*lz1)
+      integer nface,nxz,nxzd,fdim,idx_c
+c     LLLL
+
+      real dclock,t0
+      real srflx(6*2*ldim*lx1*lz1*lelt)
+      real C0,Y0,Y1,Z0,Z1,fu1,fu2,fu3,fw1,fw2,fw3
+      integer i,j,k,l,e,f
+
+      nxzfl = nx1*nz1*nelt*2*ndim
+
+      if (ifcentral) C0 = 0.0
+      if (ifupwind) C0 = 1.0
+
+!$ACC  DATA PRESENT(srflx,cemface,unxm,unym,fEN,fHN)
+!$ACC& PRESENT(Y_0,Y_1,Z_0,Z_1)
+c      call set_dg_wgts!(wghtc,wghtf) ! TODO Lan
+
+      if (imode.eq.1) then
+c     TE case
+         k = nxzfl
+!$ACC PARALLEL LOOP
+         do i = 1,nxzfl
+c     -(n x H)_x
+            srflx(0*k+i) = -unym(i)*fHN(i,3)
+c     -(n x H)_y
+            srflx(1*k+i) = unxm(i)*fHN(i,3)
+c     -(n x E)_z
+            srflx(2*k+i) = -unxm(i)*fEN(i,2)+unym(i)*fEN(i,1)
+         enddo
+!$ACC END PARALLEL LOOP
+
+         call userfsrc(rktime,srflx(0*k+1),srflx(1*k+1),srflx(3*k+1),
+     $                        srflx(4*k+1),srflx(5*k+1),srflx(2*k+1))
+
+c   FFFF
+        nface = 2*ldim
+        nxz   = lx1*lz1
+        nxzd  = lxd*lzd
+        k = nxzfl
+        fdim = ldim-1 ! Dimension of face
+  
+        do e = 1,nelt
+        do f = 1,nface
+        do i=1,nxz
+          jaco_c(i) = area(i,1,f,e)/wghtc(i)
+        enddo
+
+        idx_c= 1 + (f-1)*nxz + (e-1)*nface*nxz
+        call map_faced(srflx_f(1,1),srflx(0*k+idx_c),lx1,lxd,fdim,0) ! 0 --> coarse to fine
+        call map_faced(srflx_f(1,2),srflx(1*k+idx_c),lx1,lxd,fdim,0) ! 0 --> coarse to fine
+        call map_faced(srflx_f(1,3),srflx(2*k+idx_c),lx1,lxd,fdim,0) ! 0 --> coarse to fine
+        call map_faced(jaco_f,jaco_c,lx1,lxd,fdim,0) ! 0 --> coarse to fine
+
+        do i=1,nxzd
+          srflx_f(i,1)=srflx_f(i,1)*jaco_f(i)*wghtf(i)
+          srflx_f(i,2)=srflx_f(i,2)*jaco_f(i)*wghtf(i)
+          srflx_f(i,3)=srflx_f(i,3)*jaco_f(i)*wghtf(i)
+        enddo
+        call map_faced(srflx(0*k+idx_c),srflx_f(1,1),lx1,lxd,fdim,1) ! 1 --> fine to coarse
+        call map_faced(srflx(1*k+idx_c),srflx_f(1,2),lx1,lxd,fdim,1) ! 1 --> fine to coarse
+        call map_faced(srflx(2*k+idx_c),srflx_f(1,3),lx1,lxd,fdim,1) ! 1 --> fine to coarse
+
+        enddo
+        enddo
+
+
+        t0 = dclock()
+        call gs_op_fields(gsh_face,srflx,nxzfl,3,1,1,0)
+        call measure_comm(t0)
+
+        if (ifpml.or.ifpec) call cem_maxwell_flux_pec(srflx)
+
+        k = nxzfl
+!$ACC PARALLEL LOOP
+        do i = 1,nxzfl
+           Y0 = Y_0(i)
+           Y1 = Y_1(i)
+           Z0 = Z_0(i)
+           Z1 = Z_1(i)
+c    (n x (n x [[E]]))_x
+           fw1 =  unym(i)*srflx(2*k+i)
+c    (n x (n x [[E]]))_y
+           fw2 = -unxm(i)*srflx(2*k+i)
+c    n x (n x [[H]])
+           fu3 =  unxm(i)*srflx(1*k+i)-unym(i)*srflx(0*k+i)
+           srflx(0*k+i) = 0.5/Z0*(Z1*srflx(0*k+i)-C0*fw1)
+           srflx(1*k+i) = 0.5/Z0*(Z1*srflx(1*k+i)-C0*fw2)
+           srflx(2*k+i) = 0.5/Y0*(-Y1*srflx(2*k+i)-C0*fu3)
+        enddo
+!$ACC END PARALLEL LOOP
+      endif !TE
+
+      return
+      end
+c-----------------------------------------------------------------------
       subroutine cem_maxwell_flux2d(srflx)
 c-----------------------------------------------------------------------
       implicit none
@@ -819,19 +970,35 @@ c-----------------------------------------------------------------------
       include 'EMWAVE'
       include 'PARALLEL'
       include 'RK5'
+      include 'DEALIAS'
+
+      integer    ldd,md
+      parameter (ldd = lxd**ldim  )
+      parameter ( md = lxd        )
+      common /ddtmp4/ dxmd(lxd,lxd),dxtmd(lxd,lxd)
+      common /ddtmp5/ w3md(ldd),wgld(lxd),zmd(lxd)
+      real            dxmd,dxtmd,w3md,wgld,zmd
+
+      common /finewts/ zptf(lxd),wgtf(lxd),wghtf(lxd*lzd),wghtc(lx1*lz1)
+      real zptf,wgtf,wghtf,wghtc
+c      real wghtf(lxd*lzd),wghtc(lx1*lz1)
+
+      real srflx_f(lxd*lzd,6)
+      real jaco_f(lxd*lzd),jaco_c(lx1*lz1)
+      integer nface,nxz,nxzd,fdim,idx_c
 
       real dclock,t0
       real srflx(6*2*ldim*lx1*lz1*lelt)
       real C0,Y0,Y1,Z0,Z1,fu1,fu2,fu3,fw1,fw2,fw3
-      integer i,j,k,e,f
+      integer i,j,k,l,e,f
 
       nxzfl = nx1*nz1*nelt*2*ndim
 
       if (ifcentral) C0 = 0.0
       if (ifupwind) C0 = 1.0
 
-!$ACC  DATA PRESENT(srflx,cemface,unxm,unym,fEN,fHN)
-!$ACC& PRESENT(Y_0,Y_1,Z_0,Z_1)
+
+
       if (imode.eq.2) then
 c     TM case
          k = nxzfl
@@ -872,8 +1039,8 @@ c     -(n x H)_z
             srflx(2*k+i) = 0.5/Z0*(Z1*srflx(2*k+i)-C0*fw3)
          enddo
 !ACC END PARALLEL LOOP
-      elseif (imode.eq.1) then
-c     TE case
+       elseif (imode.eq.1) then
+c       TE case
          k = nxzfl
 !$ACC PARALLEL LOOP
          do i = 1,nxzfl
@@ -913,7 +1080,137 @@ c     n x (n x [[H]])
             srflx(2*k+i) = 0.5/Y0*(-Y1*srflx(2*k+i)-C0*fu3)
          enddo
 !$ACC END PARALLEL LOOP
-      endif
+       endif
+!$ACC END DATA
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine cem_maxwell_dflux3d(srflx)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'GEOM'
+      include 'INPUT'
+      include 'TOPOL'
+      include 'TSTEP'
+      include 'EMWAVE'
+      include 'PARALLEL'
+      include 'RK5'
+      include 'WZ' ! w3m1
+
+      integer    ldd,md
+      parameter (ldd = lxd**ldim  )
+      parameter ( md = lxd        )
+      common /ddtmp4/ dxmd(lxd,lxd),dxtmd(lxd,lxd)
+      common /ddtmp5/ w3md(ldd),wgld(lxd),zmd(lxd)
+      real            dxmd,dxtmd,w3md,wgld,zmd
+
+      common /finewts/ zptf(lxd),wgtf(lxd),wghtf(lxd*lzd),wghtc(lx1*lz1)
+      real zptf,wgtf,wghtf,wghtc
+
+      real srflx_f(lxd*lzd,6)
+      real jaco_f(lxd*lzd),jaco_c(lx1*lz1)
+      integer nface,nxz,nxzd,fdim,idx_c
+c     LLLL
+
+      real dclock,t0
+      real srflx(6*2*ldim*lx1*lz1*lelt)
+      real C0,y0,y1,z0,z1,y02,z02,c02y,c02z,fu1,fu2,fu3,fw1,fw2,fw3
+      integer i,j,k,l,e,f
+
+      if (ifcentral) C0 = 0.0
+      if (ifupwind) C0 = 1.0
+
+!$ACC  DATA PRESENT(srflx,fEN,fHN,unxm,unym,unzm)
+!$ACC& PRESENT(Y_0,Y_1,Z_0,Z_1)
+      k = nxzfl
+!$ACC PARALLEL LOOP
+      do i = 1,nxzfl
+c     - n x E
+         srflx(0*k+i) = -unym(i)*fEN(i,3)+unzm(i)*fEN(i,2)
+         srflx(1*k+i) = -unzm(i)*fEN(i,1)+unxm(i)*fEN(i,3)
+         srflx(2*k+i) = -unxm(i)*fEN(i,2)+unym(i)*fEN(i,1)
+c     - n x H
+         srflx(3*k+i) = -unym(i)*fHN(i,3)+unzm(i)*fHN(i,2)
+         srflx(4*k+i) = -unzm(i)*fHN(i,1)+unxm(i)*fHN(i,3)
+         srflx(5*k+i) = -unxm(i)*fHN(i,2)+unym(i)*fHN(i,1)
+      enddo
+!$ACC END PARALLEL LOOP
+
+      call userfsrc(rktime,srflx(3*k+1),srflx(4*k+1),srflx(5*k+1),
+     $                     srflx(0*k+1),srflx(1*k+1),srflx(2*k+1))
+
+      nface = 2*ldim
+      nxz   = lx1*lz1
+      nxzd  = lxd*lzd
+      k = nxzfl
+      fdim = ldim-1 ! Dimension of face
+
+      do e = 1,nelt
+      do f = 1,nface
+      do i=1,nxz
+        jaco_c(i) = area(i,1,f,e)/wghtc(i)
+      enddo
+
+      idx_c= 1 + (f-1)*nxz + (e-1)*nface*nxz
+      call map_faced(srflx_f(1,1),srflx(0*k+idx_c),lx1,lxd,fdim,0) ! 0 --> coarse to fine
+      call map_faced(srflx_f(1,2),srflx(1*k+idx_c),lx1,lxd,fdim,0) ! 0 --> coarse to fine
+      call map_faced(srflx_f(1,3),srflx(2*k+idx_c),lx1,lxd,fdim,0) ! 0 --> coarse to fine
+      call map_faced(jaco_f,jaco_c,lx1,lxd,fdim,0) ! 0 --> coarse to fine
+
+      do i=1,nxzd
+        srflx_f(i,1)=srflx_f(i,1)*jaco_f(i)*wghtf(i)
+        srflx_f(i,2)=srflx_f(i,2)*jaco_f(i)*wghtf(i)
+        srflx_f(i,3)=srflx_f(i,3)*jaco_f(i)*wghtf(i)
+      enddo
+      call map_faced(srflx(0*k+idx_c),srflx_f(1,1),lx1,lxd,fdim,1) ! 1 --> fine to coarse
+      call map_faced(srflx(1*k+idx_c),srflx_f(1,2),lx1,lxd,fdim,1) ! 1 --> fine to coarse
+      call map_faced(srflx(2*k+idx_c),srflx_f(1,3),lx1,lxd,fdim,1) ! 1 --> fine to coarse
+
+      enddo
+      enddo
+
+
+
+      t0 = dclock()
+      call gs_op_fields(gsh_face,srflx,nxzfl,6,1,1,0)
+      call measure_comm(t0)
+
+c     The array srflx now contains n x [E] and n x [H]. (un^+ = - un^-.)
+      if (ifpec.or.ifpml) call cem_maxwell_flux_pec(srflx)
+
+      k = nxzfl
+!$ACC PARALLEL LOOP
+      do i = 1,nxzfl
+         Y0 = Y_0(i)
+         Y1 = Y_1(i)
+         Z0 = Z_0(i)
+         Z1 = Z_1(i)
+
+         Y02 = -0.5/Y0*Y1
+         Z02 = 0.5/Z0*Z1
+         C02Y = 0.5/Y0*C0
+         C02Z = 0.5/Z0*C0
+
+c     fu = n x (n x [H])
+         fu1 =unym(i)*srflx(5*k+i)-unzm(i)*srflx(4*k+i)
+         fu2 =unzm(i)*srflx(3*k+i)-unxm(i)*srflx(5*k+i)
+         fu3 =unxm(i)*srflx(4*k+i)-unym(i)*srflx(3*k+i)
+
+c     fw = n x (n x [E])
+         fw1 =unym(i)*srflx(2*k+i)-unzm(i)*srflx(1*k+i)
+         fw2 =unzm(i)*srflx(0*k+i)-unxm(i)*srflx(2*k+i)
+         fw3 =unxm(i)*srflx(1*k+i)-unym(i)*srflx(0*k+i)
+
+         srflx(0*k+i) = Y02*srflx(0*k+i)-C02Y*fu1
+         srflx(1*k+i) = Y02*srflx(1*k+i)-C02Y*fu2
+         srflx(2*k+i) = Y02*srflx(2*k+i)-C02Y*fu3
+         srflx(3*k+i) = Z02*srflx(3*k+i)-C02Z*fw1
+         srflx(4*k+i) = Z02*srflx(4*k+i)-C02Z*fw2
+         srflx(5*k+i) = Z02*srflx(5*k+i)-C02Z*fw3
+      enddo
+!$ACC END PARALLEL LOOP
 !$ACC END DATA
 
       return
@@ -997,6 +1294,49 @@ c     fw = n x (n x [E])
       enddo
 !$ACC END PARALLEL LOOP
 !$ACC END DATA
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine set_dg_wgts!(wghtc,wghtf) !Lan
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer icalld
+      save    icalld
+      data    icalld /0/
+
+      common /finewts/ zptf(lxd),wgtf(lxd),wghtf(lxd*lzd),wghtc(lx1*lz1)
+      real zptf,wgtf,wghtf,wghtc
+c      real zptf(lxd),wgtf(lxd),wghtf(lxd*lzd),wghtc(lx1*lz1)
+      integer i,j,k
+
+c      if (icalld.eq.0) then    !  Set fine-scale surface weights
+
+c         icalld = 1
+c     GGGG
+         call zwgll(zptf,wgtf,lxd)
+         if (if3d) then
+            k=0
+            do j=1,lz1
+            do i=1,lx1
+               k=k+1
+               wghtc(k)=wxm1(i)*wzm1(j)
+            enddo
+            enddo
+            k=0
+            do j=1,lzd
+            do i=1,lxd
+               k=k+1
+               wghtf(k)=wgtf(i)*wgtf(j)
+            enddo
+            enddo
+         else
+            call copy(wghtc,wxm1,lx1)
+            call copy(wghtf,wgtf,lxd)
+         endif
+c      endif
 
       return
       end
@@ -1540,6 +1880,216 @@ c...         sgn1/sgn2 is assigned "-" or "+" when calling; sgn1/sgn2=-1/1 if TE
 c-----------------------------------------------------------------------
       subroutine maxwell_wght_dcurl(w1,w2,w3,u1,u2,u3)
 c-----------------------------------------------------------------------
+C     Eeperimant for correcting dealias, TODO Lan
+
+c     Combined weighted (w1,w2,w3) = B*curl(u1,u2,u3) on a finer mesh
+c     with dealiasing.
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'EMWAVE'
+      include 'DEALIAS'
+
+      real     w0(1)
+      real     u1(1),u2(1),u3(1)
+      real     w1(1),w2(1),w3(1)
+
+      integer    ldd,md
+      parameter (ldd = lxd**ldim  )
+      parameter ( md = lxd        )
+
+      common /t1t/ ud1r(ldd),ud1s(ldd),ud1t(ldd)
+     $           , ud2r(ldd),ud2s(ldd),ud2t(ldd)
+     $           , ud3r(ldd),ud3s(ldd),ud3t(ldd)
+
+      real         ud1r,ud1s,ud1t
+     $           , ud2r,ud2s,ud2t
+     $           , ud3r,ud3s,ud3t
+
+      real    u1rw,u1sw,u1tw
+      real    u2rw,u2sw,u2tw
+      real    u3rw,u3sw,u3tw
+
+      real    rxmn_k, sxmn_k, txmn_k
+      real    rymn_k, symn_k, tymn_k
+      real    rzmn_k, szmn_k, tzmn_k
+
+      common /ctmp1/ u1r(lx1*ly1*lz1),u1s(lx1*ly1*lz1),u1t(lx1*ly1*lz1)
+     $             , u2r(lx1*ly1*lz1),u2s(lx1*ly1*lz1),u2t(lx1*ly1*lz1)
+     $             , u3r(lx1*ly1*lz1),u3s(lx1*ly1*lz1),u3t(lx1*ly1*lz1)
+
+      real u1r,u2r,u3r,u1s,u2s,u3s,u1t,u2t,u3t
+      common /ddtmp2/ ju1(ldd),ju2(ldd),ju3(ldd)
+      real            ju1,ju2,ju3
+
+      common /ddtmp3/ wd1(ldd),wd2(ldd),wd3(ldd)
+      real            wd1,wd2,wd3
+      common /ddtmp4/ dxmd(lxd,lxd),dxtmd(lxd,lxd)
+      common /ddtmp5/ w3md(ldd),wgld(lxd),zmd(lxd)
+      real            dxmd,dxtmd,w3md,wgld,zmd
+
+      integer icalld, e, l, i, j, k, j1, jd, nxyd, nxy, nn, mm, mx
+      save    icalld
+      data    icalld /0/
+
+      mx    = nx1
+      nn    = nx1-1
+      mm    = md -1
+
+      nxyd  = md**ndim
+      nxy   = mx**ndim
+
+
+
+
+      if (icalld.eq.0) then
+
+         icalld = 1
+
+         call zwgll(zmd,wgld,md)
+
+         if (ldim.eq.3) then
+            l = 0
+            do k=1,lxd
+               do j=1,lyd
+                  do i=1,lzd
+                     l=l+1
+                     w3md(l) = wgld(i)*wgld(j)*wgld(k)
+                  enddo
+               enddo
+            enddo
+         else
+            l = 0
+            do j=1,lxd
+               do i=1,lyd
+                  l=l+1
+                  w3md(l) = wgld(i)*wgld(j)
+               enddo
+            enddo
+         endif
+c     This will need to be dynamic if we have p-refinement
+c         do e=1,nelt
+c
+c            j1 = nxy *(e-1) + 1
+c            jd = nxyd*(e-1) + 1
+c
+c            call intp_rstd (rxmd(jd),rxm1(j1,1,1,1),mx,md,if3d, 0)
+c            call intp_rstd (sxmd(jd),sxm1(j1,1,1,1),mx,md,if3d, 0)
+c            call intp_rstd (txmd(jd),txm1(j1,1,1,1),mx,md,if3d, 0)
+c            call intp_rstd (rymd(jd),rym1(j1,1,1,1),mx,md,if3d, 0)
+c            call intp_rstd (symd(jd),sym1(j1,1,1,1),mx,md,if3d, 0)
+c            call intp_rstd (tymd(jd),tym1(j1,1,1,1),mx,md,if3d, 0)
+c            call intp_rstd (rzmd(jd),rzm1(j1,1,1,1),mx,md,if3d, 0)
+c            call intp_rstd (szmd(jd),szm1(j1,1,1,1),mx,md,if3d, 0)
+c            call intp_rstd (tzmd(jd),tzm1(j1,1,1,1),mx,md,if3d, 0)
+c
+c         enddo
+c
+         call gen_dgl(dxmd,dxtmd,md,md,wgld)
+c
+      endif
+c
+      do e=1,nelt
+c
+         j  = nxyd *(e-1)
+         j1 = nxy  *(e-1) + 1
+c
+c         call intp_rstd (ju1,u1(j1),mx,md,if3d, 0) ! 0 ==> forward
+c         call intp_rstd (ju2,u2(j1),mx,md,if3d, 0)
+c         call intp_rstd (ju3,u3(j1),mx,md,if3d, 0)
+c
+         if (ldim.eq.3) then
+c
+c            call local_grad3 (ud1r,ud1s,ud1t,ju1,mm,1,dxmd,dxtmd)
+c            call local_grad3 (ud2r,ud2s,ud2t,ju2,mm,1,dxmd,dxtmd)
+c            call local_grad3 (ud3r,ud3s,ud3t,ju3,mm,1,dxmd,dxtmd)
+c
+c            do i=1,nxyd
+c
+c               k = i+j
+c
+c               u1rw = ud1r(i) * w3md(i)
+c               u1sw = ud1s(i) * w3md(i)
+c               u1tw = ud1t(i) * w3md(i)
+c               u2rw = ud2r(i) * w3md(i)
+c               u2sw = ud2s(i) * w3md(i)
+c               u2tw = ud2t(i) * w3md(i)
+c               u3rw = ud3r(i) * w3md(i)
+c               u3sw = ud3s(i) * w3md(i)
+c               u3tw = ud3t(i) * w3md(i)
+c
+c               rxmn_k= rxmd(k)
+c               sxmn_k= sxmd(k)
+c               txmn_k= txmd(k)
+c               rymn_k= rymd(k)
+c               symn_k= symd(k)
+c               tymn_k= tymd(k)
+c               rzmn_k= rzmd(k)
+c               szmn_k= szmd(k)
+c               tzmn_k= tzmd(k)
+c
+c               wd1(k)= u3rw * rymn_k + u3sw * symn_k + u3tw * tymn_k
+c     $               - u2rw * rzmn_k - u2sw * szmn_k - u2tw * tzmn_k
+c               wd2(k)= u1rw * rzmn_k + u1sw * szmn_k + u1tw * tzmn_k
+c     $               - u3rw * rxmn_k - u3sw * sxmn_k - u3tw * txmn_k
+c               wd3(k)= u2rw * rxmn_k + u2sw * sxmn_k + u2tw * txmn_k
+c     $               - u1rw * rymn_k - u1sw * symn_k - u1tw * tymn_k
+c
+c            enddo
+c
+c
+         else
+c
+c     DDDD
+
+            call local_grad2 (u1r,u1s,u1(j1),nn,1,dxm1,dxtm1)
+            call local_grad2 (u2r,u2s,u2(j1),nn,1,dxm1,dxtm1)
+            call local_grad2 (u3r,u3s,u3(j1),nn,1,dxm1,dxtm1)
+
+            do i=1,nxy
+
+               k = i+j1-1
+
+               u1rw = u1r(i)! * w3md(i)
+               u1sw = u1s(i)! * w3md(i)
+               u2rw = u2r(i)! * w3md(i)
+               u2sw = u2s(i)! * w3md(i)
+               u3rw = u3r(i)! * w3md(i)
+               u3sw = u3s(i)! * w3md(i)
+
+               rxmn_k= rxmn(k)
+               sxmn_k= sxmn(k)
+               rymn_k= rymn(k)
+               symn_k= symn(k)
+
+               w1(i) = ( u3rw * rymn_k + u3sw * symn_k )
+               w2(i) =-( u3rw * rxmn_k + u3sw * sxmn_k )
+               w3(i) = ( u2rw * rxmn_k + u2sw * sxmn_k
+     $                  - u1rw * rymn_k - u1sw * symn_k )
+
+            enddo
+
+         endif
+
+         call intp_rstd (wd1,w1(j1),mx,md,if3d,0) ! 0 --> backward
+         call intp_rstd (wd2,w2(j1),mx,md,if3d,0) ! 0 --> backward
+         call intp_rstd (wd3,w3(j1),mx,md,if3d,0) ! 0 --> backward
+
+         call col2 (wd1,w3md,nxyd)
+         call col2 (wd2,w3md,nxyd)
+         call col2 (wd3,w3md,nxyd)
+
+         call intp_rstd (w1(j1),wd1,mx,md,if3d,1) ! 1 --> backward
+         call intp_rstd (w2(j1),wd2,mx,md,if3d,1) ! 1 --> backward
+         call intp_rstd (w3(j1),wd3,mx,md,if3d,1) ! 1 --> backward
+
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine maxwell_wght_dcurl_old(w1,w2,w3,u1,u2,u3)
+c-----------------------------------------------------------------------
 c     Combined weighted (w1,w2,w3) = B*curl(u1,u2,u3) on a finer mesh
 c     with dealiasing.
       implicit none
@@ -1678,11 +2228,11 @@ c     This will need to be dynamic if we have p-refinement
                szmn_k= szmd(k)
                tzmn_k= tzmd(k)
 
-               wd1(k)= u3rw * rymn_k + u3sw * symn_k + u3tw * tymn_k
+               wd1(i)= u3rw * rymn_k + u3sw * symn_k + u3tw * tymn_k
      $               - u2rw * rzmn_k - u2sw * szmn_k - u2tw * tzmn_k
-               wd2(k)= u1rw * rzmn_k + u1sw * szmn_k + u1tw * tzmn_k
+               wd2(i)= u1rw * rzmn_k + u1sw * szmn_k + u1tw * tzmn_k
      $               - u3rw * rxmn_k - u3sw * sxmn_k - u3tw * txmn_k
-               wd3(k)= u2rw * rxmn_k + u2sw * sxmn_k + u2tw * txmn_k
+               wd3(i)= u2rw * rxmn_k + u2sw * sxmn_k + u2tw * txmn_k
      $               - u1rw * rymn_k - u1sw * symn_k - u1tw * tymn_k
 
             enddo
@@ -1710,9 +2260,9 @@ c     This will need to be dynamic if we have p-refinement
                rymn_k= rymd(k)
                symn_k= symd(k)
 
-               wd1(k) = ( u3rw * rymn_k + u3sw * symn_k )
-               wd2(k) =-( u3rw * rxmn_k + u3sw * sxmn_k )
-               wd3(k) = ( u2rw * rxmn_k + u2sw * sxmn_k
+               wd1(i) = ( u3rw * rymn_k + u3sw * symn_k )
+               wd2(i) =-( u3rw * rxmn_k + u3sw * sxmn_k )
+               wd3(i) = ( u2rw * rxmn_k + u2sw * sxmn_k
      $                  - u1rw * rymn_k - u1sw * symn_k )
 
             enddo
@@ -1752,7 +2302,7 @@ c     weighted curl:   (w1,w2,w3) = curl x (u1,u2,u3)
      $             , u3r(lx1*ly1*lz1),u3s(lx1*ly1*lz1),u3t(lx1*ly1*lz1)
 
       real u1r,u2r,u3r,u1s,u2s,u3s,u1t,u2t,u3t
-
+c     OOOO
       nn    = nx1-1
 
       if (ldim.eq.3) then

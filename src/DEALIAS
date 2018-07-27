@@ -16,5 +16,7 @@
 
       real  rxmd,rymd,rzmd,sxmd,symd,szmd,txmd,tymd,tzmd,aud
 
-
+      common /interpd/ imd1(lx1,lxd), imd1t(lxd,lx1)
+     $               , im1d(lxd,lx1), im1dt(lx1,lxd)
+      real imd1, imd1t, im1d, im1dt
 

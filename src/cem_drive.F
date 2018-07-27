@@ -82,6 +82,8 @@ c     real*8 dclock
       call bcmask               ! boundary mapping
       call load_semhat_weighted ! semHAT
 
+      if (ifdealias) call dg_setup ! ToDo: Lan
+
       call time00
       call opcount(2)
       call dofcnt

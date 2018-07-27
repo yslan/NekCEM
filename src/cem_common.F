@@ -580,7 +580,87 @@ c
 
       return
       end
+c-----------------------------------------------------------------------
+      subroutine dg_setup
+      include 'SIZE'
+      include 'TOTAL'
 
+c      common /ivrtx/ vertex ((2**ldim)*lelt)
+c      common /ctmp1/ qs(lx1*ly1*lz1*lelt)
+c      integer vertex
+
+c      logical ifany
+c      save    ifany
+c      data    ifany /.false./
+
+c      do ifield=1,ldimt1
+c         if (ifdgfld(ifield)) ifany=.true.
+c      enddo
+
+c      if (ifdealias) then
+
+c        call setup_dg_gs(dg_hndlx,lx1,ly1,lz1,nelt,nelgt,vertex)
+c        call dg_set_fc_ptr
+
+c        param(59)=1
+c        call geom_reset(1)
+c        call set_unr
+c      endif
+
+
+c      n = lx1*ly1*lz1*nelt
+c      call invers2(binvdg,bm1,n)
+
+      call set_dg_wgts
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine map_faced(ju,u,mx,md,fdim,idir) ! GLL->GL interpolation
+
+c     GLL interpolation from mx to md for a face array of size (nx,nz)
+
+c     If idir ^= 0, then apply transpose operator  (md to mx)
+
+      include 'SIZE'
+
+      real    ju(1),u(1)
+      integer fdim
+
+      parameter (ldg=lxd**3,lwkd=4*lxd*lxd)
+      common /dgrad/ d(ldg),dt(ldg),dg(ldg),dgt(ldg),jgl(ldg),jgt(ldg)
+     $             , wkd(lwkd)
+      real jgl,jgt
+
+      parameter (ld=2*lxd)
+      common /ctmp0/ w(ld**ldim,2)
+
+      call lim_chk(md,ld,'md   ','ld   ','map_faced ')
+      call lim_chk(mx,ld,'mx   ','ld   ','map_faced ')
+
+c     call copy(ju,u,mx)
+c     return
+
+      call get_int_ptr (i,mx,md)
+
+      if (idir.eq.0) then
+         if (fdim.eq.2) then
+            call mxm(jgl(i),md,u,mx,wkd,mx)
+            call mxm(wkd,md,jgt(i),mx,ju,md)
+         else
+            call mxm(jgl(i),md,u,mx,ju,1)
+         endif
+      else
+         if (fdim.eq.2) then
+            call mxm(jgt(i),mx,u,md,wkd,md)
+            call mxm(wkd,mx,jgl(i),md,ju,mx)
+         else
+            call mxm(jgt(i),mx,u,md,ju,1)
+         endif
+      endif
+
+      return
+      end
 c-----------------------------------------------------------------------
       subroutine gen_int(jgl,jgt,mp,np,w)
 
@@ -713,6 +793,59 @@ c
       return
       end
 c-----------------------------------------------------------------------
+      subroutine setmap(n1,nd)
+c
+      include 'SIZE'
+      include 'DEALIAS'
+c
+      parameter(lx=80)
+      real z1(lx),zd(lx),w(lx)
+c
+      if (n1.gt.lx.or.nd.gt.lx) then
+         write(6,*)'ERROR: increase lx in setmap to max:',n1,nd
+         call exitt
+      endif
+c
+      call zwgll(z1,w,n1)
+      call zwgll(zd,w,nd)
+      call igllm(im1d,im1dt,z1,zd,n1,nd,n1,nd)
+      call igllm(imd1,imd1t,zd,z1,nd,n1,nd,n1)
+c
+      return
+      end
+cc-----------------------------------------------------------------------
+c      subroutine mapw(md,nd,m1,n1,mflg)
+cc
+cc     Interpolate from mesh "1" to "d" if mflg = 1
+cc
+c      include 'SIZE'
+c      include 'DEALIAS'
+cc
+c      real w(lxd*lxd*lx1)
+c      real md(lxd,lyd,lzd,lelv),m1(lx1,ly1,lz1,lelv)
+cc
+c      integer icalld
+c      save icalld
+c      data icalld /0/
+cc
+c      if (icalld .eq. 0) then
+c         call setmap(n1,nd)
+c         icalld = icalld + 1
+c      endif
+cc
+c      if (mflg .eq.1) then
+c         do ie = 1,nelv
+c            call specmp(md(1,1,1,ie),nd,m1(1,1,1,ie),n1,im1d,im1dt,w)
+c         enddo
+c      else
+c         do ie = 1,nelv
+c            call specmp(m1(1,1,1,ie),n1,md(1,1,1,ie),nd,imd1,imd1t,w)
+c         enddo
+c      endif
+cc
+c      return
+c      end
+cc-----------------------------------------------------------------------
       subroutine get_dgl_ptr (ip,mx,md)
 c
 c     Get pointer to GL-GL interpolation dgl() for pair (mx,md)
