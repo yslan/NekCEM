@@ -23,6 +23,7 @@ c-----------------------------------------------------------------------
       include 'TOTAL'
       include 'CUBESPHERE'
       include 'CUBESPHEREGRID'
+      include 'EMWAVE' ! FIXME: for output only, debugging purpose, Lan
 
       real tt
       real hx(lpts),hy(lpts),hz(lpts)
@@ -30,7 +31,13 @@ c-----------------------------------------------------------------------
       real u0,alpha,delta
       real omega,grav_g
       real gh0,gh
-      integer i
+      real my_flx(2*ldim*lx1*lz1*lelt,3)
+      real my_vol(lpts,3)
+      real w0(lpts1),w1(lpts1),w2(lpts1)
+      integer i,j,k,n
+      real glamax
+      real amax_flx
+c     LLL
 
 c     Compute ini field
       u0 = 2.0*pi*SphR/12.0/86400.0
@@ -48,7 +55,7 @@ c     Get u,v
      $                     ,CS_V_u1,CS_V_u2,alpha,u0)
 
 c     Get h
-c     call get_testcase_h(CS_h,SphR,delta)
+c      call get_testcase_h(CS_h,SphR,delta)
       do i=1,npts
         gh = gh0 - u0*0.5 * (2.0*SphR*omega + u0)
      $     * ( sn_lati(i)*cos(alpha) 
@@ -74,10 +81,56 @@ cc        CS_Coriolis(i) = 2.0*omega*sn_lati(i)
         CS_hs(i) = 0.0
       enddo
 
+      call CS_cem_div_skew_sym(w0,w1,w2,CS_V_u1,CS_V_u2,CS_h,CS_Jac)
+
+
+      k = nxzfl
+c      do i = 1,nxzfl
+c        j = cemface(i) ! volume index
+c        srflx(0*k+i) = CS_V_u1(j) ! advection
+c        srflx(1*k+i) = CS_V_u2(j) !   ub1
+c      enddo
+
+      do i = 1,nxzfl
+        j = cemface(i)
+        my_flx(i,1) = unxm(i)*CS_V_u1(j)*CS_Jac(j,1,1,1)*CS_h(j)
+     $              + unym(i)*CS_V_u2(j)*CS_Jac(j,1,1,1)*CS_h(j)
+
+        my_flx(i,2) = abs(unxm(i))*CS_V_u1(j)*CS_Jac(j,1,1,1)
+     $              + abs(unym(i))*CS_V_u2(j)*CS_Jac(j,1,1,1)
+      enddo
+   
+      call gs_op_fields(gsh_face,my_flx(1,1),nxzfl,1,1,1,0)   ! srflx = q^- + q^+
+      call gs_op_fields(gsh_face,my_flx(1,2),nxzfl,1,1,1,0)   ! srflx = q^- + q^+
+
+      amax_flx = glamax(my_flx(1,1),nxzfl)
+      if (nid.eq.0) write(*,*)'Lan_>> flx amax',amax_flx
+ 
+      do i = 1,nxzfl
+        j = cemface(i) ! volume index
+        my_vol(j,1) = my_flx(i,1) ! advection
+        my_vol(j,2) = my_flx(i,2) ! advection
+      enddo
+
+      call userchk
+
+      call copy(EN(1,1),my_vol(1,1),npts)
+      call copy(EN(1,2),my_vol(1,2),npts)
+c      call copy(EN(1,1),w1,npts)
+c      call copy(EN(1,2),w2,npts)
+      call copy(SEN(1,1),CS_V_ub1,npts)
+      call copy(SEN(1,2),CS_V_ub2,npts)
+
+
+c      call cem_out
+c      if (nid.eq.0) write(*,*)'Lan_ before exitt'
+c      call exitt
+
+
 
 
 c     output step 0
-      call usersol(tt,hx,hy,hz,ex,ey,ez)
+c     call usersol(tt,hx,hy,hz,ex,ey,ez)
 
       return
       end
@@ -104,6 +157,10 @@ c-----------------------------------------------------------------------
       call copy(HN(1,1),CS_h,n)
       call copy(HN(1,2),CS_V_u1,n)
       call copy(HN(1,3),CS_V_u2,n)
+
+c      call col3(HN(1,2),CS_V_u1,CS_Jac,n)
+c      call col3(HN(1,3),CS_V_u2,CS_Jac,n)
+
       call copy(solhx,CS_V_X,n)
       call copy(solhy,CS_V_Y,n)
       call copy(solhz,CS_V_Z,n)
@@ -694,7 +751,10 @@ c     compute coordinate on sphere
         endif
       enddo
 
-      call copy(xm1,CubeSphX,npts)
+
+c     XXXX
+c     Overwrite coordinate (not computed, only effect visualization)
+      call copy(xm1,CubeSphX,npts) !xm1=CubeSphX
       call copy(ym1,CubeSphY,npts)
       call copy(zm1,CubeSphZ,npts)
       call copy(xmn,CubeSphX,npts)

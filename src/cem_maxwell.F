@@ -352,9 +352,13 @@ c         call rk_CS_adv_ab(rkstep) ! << rk_maxwell_ab
 
       
       if (iffilter) then ! ToDo:modified later, Lan
-        call copy(HN(1,1),CS_h,npts)
-        call q_filter(0.01)
-        call copy(CS_h,HN(1,1),npts)
+        call copy(HN(1,1),CS_Jh,npts)
+        call copy(HN(1,2),CS_V_ub1,npts)
+        call copy(HN(1,3),CS_V_ub2,npts)
+        call q_filter(0.04)   ! 0.01
+        call copy(CS_Jh,HN(1,1),npts)
+        call copy(CS_V_ub1,HN(1,2),npts)
+        call copy(CS_V_ub2,HN(1,3),npts)
       endif
 
       return

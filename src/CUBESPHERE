@@ -24,8 +24,10 @@ c=====================================================================
       real CS_V_u1,CS_V_u2
 
       common /cs_advectionp/
-     $     CS_pen                 ! penalty
+     $     CS_pen,                 ! penalty
+     $     CS_LF_alpha                 ! penalty
       real CS_pen
+      real CS_LF_alpha
 
       common /cs_shallow/
      $     CS_V_ub1    (lpts1),     ! var in Eq 2
@@ -59,6 +61,11 @@ c=====================================================================
       real CS_S2
       real CS_tau
 
+      common /cs_shallow_pen/
+     $      pen_h(lpts1),
+     $      pen_u1(lpts1),
+     $      pen_u2(lpts1)
+      real pen_h,pen_u1,pen_u2
 
       common /cs_EarthPara/
      $     gravity
