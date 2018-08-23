@@ -142,19 +142,20 @@ C     Compute:
       return
       end
 c-----------------------------------------------------------------------
-      subroutine CS_SWE_flux(srflx)
+      subroutine CS_SWE_flux(srflx,srflx2)
 c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'TOTAL'
 c      include 'CUBESPHERE'
       real srflx(6*2*ldim*lx1*lz1*lelt)
+      real srflx2(6*2*ldim*lx1*lz1*lelt)
 
       if (ldim.eq.3) then
          write(*,*)'CS only support 2D problem'
          call exitt
       else
-         call CS_SWE_flux2d(srflx) ! << cem_maxwell_flux
+         call CS_SWE_flux2d(srflx,srflx2) ! << cem_maxwell_flux
       endif
 
       return
@@ -266,8 +267,8 @@ c     kHX=rk4a(i)*kHX
 
       call rk4_upd(CS_Jh,CS_kJh,resCS_Jh,cb,ca,dt,npts) ! kh = ca*kh + dt*resCS
                                                    !  h =     h + cb*kh 
-c      call rk4_upd(CS_V_ub1,CS_kub1,resCS_ub1,cb,ca,dt,npts)
-c      call rk4_upd(CS_V_ub2,CS_kub2,resCS_ub2,cb,ca,dt,npts)
+      call rk4_upd(CS_V_ub1,CS_kub1,resCS_ub1,cb,ca,dt,npts)
+      call rk4_upd(CS_V_ub2,CS_kub2,resCS_ub2,cb,ca,dt,npts)
 
       stime0=dclock()-stime0
 
@@ -912,6 +913,7 @@ c-----------------------------------------------------------------------
       integer i,j,k,e,f
       real tmp_flx(3*2*ldim*nx1*nz1*lelt) ! tmp
       real out_flx(3*2*ldim*nx1*nz1*lelt) ! global
+      real old_flx(3*2*ldim*nx1*nz1*lelt) ! global
       real tot_flx(3*2*ldim*nx1*nz1*lelt) ! global
 
       real tmp
@@ -936,18 +938,20 @@ c
       real srfm_h(2*ldim*lx1*lz1*lelt)
       real srfm_e(2*ldim*lx1*lz1*lelt)
 c     
-      real alpha,alpha_F1,alpha_F2
-      real GLMAX
+      real alpha,alpha_F1,alpha_F2,alpha_h
+      real glmax,glamax
       real tmp_alpha(lx1*ly1*lz1*lelt)
 
       integer iv, tar, del_k,delta_r0,delta_rN,step
       real r0(lx1),rN(lx1)
 c     LLLL
 
-cc central flux
+c central flux
+c     FFFFFF
+c     CCCCCC
       CS_tau = 1.0 ! central
-      CS_pen = CS_tau*(nx1-1)*nx1*0.5
 
+      nxzfl = nx1*nz1*nelt*2*ndim
       k = nxzfl
       do i=1,nxzfl ! face index
         j = cemface(i) ! volume index
@@ -959,18 +963,17 @@ cc central flux
       call gs_op_fields(gsh_face,srflx,nxzfl,2,1,1,0)
       
       do i=1,nxzfl
-        srflx(0*k+i) = CS_pen*srflx(0*k+i)
-        srflx(1*k+i) = CS_pen*srflx(1*k+i)
+        srflx(0*k+i) = CS_tau*srflx(0*k+i)
+        srflx(1*k+i) = CS_tau*srflx(1*k+i)
       enddo
 
 
-
-c add penalty flux
+c add LF-flux term
 c     Compute alpha^1 = max( |u^1| + sqrt( Phi*G^{11} ))      
       call col3(tmp_alpha,CS_Phi,CS_ginv11,npts)      
 c      call vsqrt(tmp_alpha,npts)
       do i = 1,npts
-         tmp_alpha(i) = abs(CS_V_u1(i)) + sqrt(tmp_alpha(i))
+        tmp_alpha(i) = abs(CS_V_u1(i)) + sqrt(tmp_alpha(i))
       enddo
       alpha_F1 = glmax(tmp_alpha,npts)
       
@@ -978,33 +981,52 @@ c     Compute alpha^2 = mxa( |u^2| + sqrt( Phi*G^{22} ))
       call col3(tmp_alpha,CS_Phi,CS_ginv22,npts)      
 c      call vsqrt(tmp_alpha,npts)
       do i = 1,npts
-         tmp_alpha(i) = abs(CS_V_u2(i)) + sqrt(tmp_alpha(i))
+        tmp_alpha(i) = abs(CS_V_u2(i)) + sqrt(tmp_alpha(i))
       enddo
       alpha_F2 = glmax(tmp_alpha,npts)
 
-      CS_pen = 0.5*max(alpha_F1,alpha_F2)* 1.0
+      alpha=max(alpha_F1,alpha_F2)
+      CS_tau = -0.5*alpha*10.0!*(nx1-1)*nx1* 1.0
 
       do i=1,nxzfl ! face index
         j = cemface(i) ! volume index
-        tmp_flx(0*k+i) = CS_Jac(j,1,1,1)*CS_h(j)*unxm(i)
-     $                 + CS_Jac(j,1,1,1)*CS_h(j)*unym(i)
-        tmp_flx(1*k+i) = CS_V_ub1(j)*unxm(i) + CS_V_ub2(j)*unym(i)
+        tmp_flx(0*k+i) = CS_Jac(j,1,1,1)*CS_h(j)
+        old_flx(0*k+i) = CS_Jac(j,1,1,1)*CS_h(j) ! saved
+
+        tmp_flx(1*k+i) = CS_V_ub1(j)
+        tmp_flx(2*k+i) = CS_V_ub2(j)
       enddo
 
-      call gs_op_fields(gsh_face,tmp_flx,nxzfl,2,1,1,0)
+      call Usub2sph_srf(tmp_flx(1*k+1),tmp_flx(2*k+1) ! tmp_flx to old_flx
+     $                 ,old_flx(1*k+1),old_flx(2*k+1))! only pass nxzfl
 
       do i=1,nxzfl
-        tmp_flx(0*k+i) = CS_pen*tmp_flx(0*k+i)
-        tmp_flx(1*k+i) = CS_pen*tmp_flx(1*k+i)
-      enddo      
+        tmp_flx(1*k+i) = old_flx(1*k+i)
+        tmp_flx(2*k+i) = old_flx(2*k+i)
+      enddo
+
+      call gs_op_fields(gsh_face,tmp_flx,nxzfl,3,1,1,0)
+      ! Jh^-     + Jh^+
+      ! u_lati^- + u_lati^+
+      ! u_long^- + u_long^+
+      
+      do i=1,nxzfl
+        srflx2 (0*k+i) = 2.0*old_flx(0*k+i)-tmp_flx(0*k+i) ! Jh^- - Jh^+
+      enddo
+      do i=1,nxzfl
+        tmp_flx(1*k+i) = 2.0*old_flx(1*k+i)-tmp_flx(1*k+i) ! long^- - long^+
+        tmp_flx(2*k+i) = 2.0*old_flx(2*k+i)-tmp_flx(2*k+i) ! lati^- - lati^+
+      enddo
+      call Usph2sub_srf(tmp_flx(1*k+1),tmp_flx(2*k+1) ! tmp_flx to srflx2
+     $                 ,srflx2 (1*k+1),srflx2 (2*k+1))! only pass nxzfl
+      ! [[ub1]], delta_ub2
 
 
       do i=1,nxzfl
-        srflx2(0*k+i) = -tmp_flx(0*k+i)
-        srflx2(1*k+i) = -tmp_flx(1*k+i)
-      enddo      
-
-
+        srflx2(0*k+i) = CS_tau*srflx2(0*k+i)
+        srflx2(1*k+i) = CS_tau*srflx2(1*k+i)
+        srflx2(2*k+i) = CS_tau*srflx2(2*k+i)
+      enddo
 
 c
 c      CS_tau = 2.0                   ! 1.0d0 ; 2.0d0 ;
@@ -1104,48 +1126,8 @@ c     $        ( srfm_e(i)*unym(i) + alpha_F2*srfm_ub2(i)*abs(unym(i)) )
 c     $       -( srfp_e(i)*unym(i) + alpha_F2*srfp_ub2(i)*abs(unym(i)) ))
 c      enddo
 
-
-ccc     PPPPP
-cc      k = nxzfl
-cc      f = 0
-cc      do i = 1,nxzfl
-cc        tot_flx(f*k+i) = srflx(f*k+i) + srflx2(f*k+i)
-cc      enddo
-cc      f = 1
-cc      do i = 1,nxzfl
-cc        tot_flx(f*k+i) = unxm(i) * srflx(1*k+i)
-cc     $                 + srflx2(1*k+i) * unxm(i)
-cc      enddo      
-cc      f = 2
-cc      do i = 1,nxzfl
-cc        tot_flx(f*k+i) = unym(i) * srflx(1*k+i)
-cc     $                 + srflx2(1*k+i) * unym(i)
-cc      enddo      
-cc
-cc 
-cc      call Minv_e(r0,rN,nx1)
-cc
-cc      do i=1,nxzfl
-cc        iv=cemface(i)
-cc        delta_r0 = unxm(i)+abs(unxm(i))*0.5
-cc        delta_rN = unym(i)+abs(unym(i))*0.5
-cc        do k=1,nx1
-cc          del_k= -(unxm(i)+unym(i))*k
-cc          step=del_k*abs(unxm(i)) + del_k*abs(unym(i))*nx1
-cc          tar=iv+step
-cc          pen_h(tar) = (r0(k)*delta_r0 +rN(k)*delta_rN)
-cc     $               * tot_flx(0*k+i)
-cc          pen_u1(tar) = (r0(k)*delta_r0 +rN(k)*delta_rN)
-cc     $                * tot_flx(1*k+i)
-cc          pen_u2(tar) = (r0(k)*delta_r0 +rN(k)*delta_rN)
-cc     $                * tot_flx(2*k+i)
-cc        enddo
-cc      enddo
-
-
       return
       end
-
 c-----------------------------------------------------------------------
       subroutine Minv_e(r0,rN,NP)
 c     Input:
@@ -1164,16 +1146,18 @@ c-----------------------------------------------------------------------
 
       N = NP-1 ! N: deg. of polyn.
 
-      call zwgll(Z,W,NP)
+      call zwgll(Z,W,NP) ! deg N, NP points
 
-      do i=1,NP      
-        dp_np1 = PNDLEG(Z(i),N)
-        dp_n   = PNDLEG(Z(i),N+1)
+      do i=1,NP
+        dp_np1 = PNDLEG(Z(i),N+1)
+        dp_n   = PNDLEG(Z(i),N)
         rN_tmp(i)  = 0.5*(dp_np1 + dp_n)
-        r0(i)  = 0.5*(dp_np1 - dp_n)*(-1)**N
+        r0(i)  = 0.5*(dp_np1 - dp_n)*(-1.0)**N
+c        write(*,*)'Lan i,dp_n,dp_np1',i,dp_n,dp_np1
       enddo
       do i=1,NP
-        rN(i) = rN_tmp(NP+1-i)
+c        rN(i) = rN_tmp(NP+1-i)
+        rN(i) = rN_tmp(i)
       enddo
 
       return
@@ -1247,38 +1231,88 @@ c-----------------------------------------------------------------------
       include 'SIZE'
       include 'TOTAL'
       include 'CUBESPHERE'
+      include 'EMWAVE' ! output perpose
 
       real srflx(6*2*ldim*lx1*lz1*lelt)
       real srflx2(6*2*ldim*lx1*lz1*lelt)
-      integer i,j,k,f
+      real tot_flx(6*2*ldim*lx1*lz1*lelt)
+      integer i,j,k,f,iv,tar
+      real delta_r0,delta_rN
+      integer del_k
+      real rN(lx1),r0(lx1)
+      real chk_ind(lpts1)
+
+      
+cc      CS_pen = (nx1-1)*nx1*0.5
+      nxzfl = nx1*nz1*nelt*2*ndim
+      write(*,*)'Lan, check nxzfl',nxzfl
+
 
       k = nxzfl
-      f = 0
       do i = 1,nxzfl
-        j = cemface(i)
-        resCS_Jh(j) = resCS_Jh(j) + srflx(f*k+i) + srflx2(f*k+i)
+        tot_flx(0*k+i) =srflx(0*k+i)*(unxm(i)+unym(i)) + srflx2(0*k+i)
+        tot_flx(1*k+i) =srflx(1*k+i)*unxm(i) + srflx2(1*k+i)
+        tot_flx(2*k+i) =srflx(1*k+i)*unym(i) + srflx2(2*k+i)
       enddo
-      f = 1
-      do i = 1,nxzfl
-        j = cemface(i)
-        resCS_ub1(j) = resCS_ub1(j) + unxm(i) * srflx(f*k+i)
-     $               + srflx2(f*k+i) * (unxm(i) + unym(i))
-      enddo
-      f = 1
-      do i = 1,nxzfl
-        j = cemface(i)
-        resCS_ub2(j) = resCS_ub2(j) + unym(i) * srflx(f*k+i)
-     $               + srflx2(f*k+i) * (unxm(i) + unym(i))
-      enddo      
 
-ccc     Volume penalty 
-cc      do i=1,npts
-cc         resCS_Jh(i) = resCS_Jh(i) + pen_h(i)
-cc      enddo
-cc      do i=1,npts
-cc         resCS_ub1(i) = resCS_ub1(i) + pen_u1(i)
-cc         resCS_ub2(i) = resCS_ub2(i) + pen_u2(i)
-cc      enddo
+cc      k = nxzfl
+cc      do i = 1,nxzfl
+cc        j = cemface(i)
+cc        resCS_Jh(j) = resCS_Jh(j)   + CS_pen*tot_flx(0*k+i)
+cc        resCS_ub1(j) = resCS_ub1(j) + CS_pen*tot_flx(1*k+i)
+cc        resCS_ub2(j) = resCS_ub2(j) + CS_pen*tot_flx(2*k+i)
+cc      enddo      
+
+c     PPPPP
+
+      if(nid.eq.0) call Minv_e(r0,rN,nx1)
+c      if(nid.eq.0) write(*,*)'Lan r0=',(r0(i),i=1,nx1)
+c      if(nid.eq.0) write(*,*)'Lan rN=',(rN(i),i=1,nx1)
+c      call exitt
+
+      call rzero(pen_h,npts)
+      call rzero(chk_ind,npts)
+      call rzero(pen_u1,npts)
+      call rzero(pen_u2,npts)
+      do i=1,nxzfl ! face
+        iv=cemface(i) ! volume
+        delta_rN = (abs(unxm(i))+unxm(i))*0.5 + (abs(unym(i))+unym(i))*0.5
+        delta_r0 = (abs(unxm(i))-unxm(i))*0.5 + (abs(unym(i))-unym(i))*0.5
+c        delta_rN = (unxm(i)+abs(unxm(i)))*0.5 + (unym(i)+abs(unym(i)))*0.5
+c        delta_r0 = (unxm(i)-abs(unxm(i)))*0.5 + (unym(i)-abs(unym(i)))*0.5
+        do j=1,nx1 ! depth
+          del_k= -(int(unxm(i))+int(unym(i))*nx1)*(j-1) ! jump of index
+          tar=iv+del_k ! target index
+          pen_h(tar) = pen_h(tar)
+     $            + (r0(j)*delta_r0+rN(nx1+1-j)*delta_rN)*tot_flx(0*k+i)
+          pen_u1(tar)= pen_u1(tar) 
+     $            + (r0(j)*delta_r0+rN(nx1+1-j)*delta_rN)*tot_flx(1*k+i)
+          pen_u2(tar)= pen_u2(tar)
+     $            + (r0(j)*delta_r0+rN(nx1+1-j)*delta_rN)*tot_flx(2*k+i)
+          chk_ind(tar) = chk_ind(tar) + 1.0 ! =4
+c          if (nid.eq.0) write(*,*)'check i,j,iv,del_k,tar,chk_ind'
+c     $                 ,i,j,iv,del_k,unxm(i),unym(i)
+c     $                 ,int(unxm(i)),int(unym(i)),tar,chk_ind(tar)
+        enddo
+c          if (nid.eq.0) write(*,*)'check i,iv',i,iv
+      enddo
+
+c      call copy(HN(1,1),chk_ind,npts)
+c
+c      call copy(EN(1,1),pen_h,npts)
+c      call copy(EN(1,2),pen_u1,npts)
+c      call copy(EN(1,3),pen_u2,npts)
+c      istep = 100
+c      call cem_out
+c      write(*,*)'Lan, before exitt'
+c      call exitt
+
+c     Volume penalty 
+      do i=1,npts
+         resCS_Jh(i)  = resCS_Jh(i)  + pen_h(i)
+         resCS_ub1(i) = resCS_ub1(i) + pen_u1(i)
+         resCS_ub2(i) = resCS_ub2(i) + pen_u2(i)
+      enddo
 
 
 
